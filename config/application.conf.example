@@ -1,0 +1,25 @@
+familydns {
+  db {
+    host     = "localhost"
+    port     = 5432
+    database = "familydns"
+    user     = "familydns"
+    password = "changeme"
+    poolSize = 10
+  }
+
+  http {
+    host      = "0.0.0.0"
+    port      = 8080
+    staticDir = "web/dist"
+  }
+
+  jwt {
+    secret      = "change-this-to-a-random-32-char-secret!!"
+    expiryHours = 24
+  }
+
+  dns {
+    cacheRefreshSeconds = 60
+  }
+}

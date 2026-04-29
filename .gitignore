@@ -1,0 +1,44 @@
+# Mill
+out/
+.mill-version
+.bsp/
+
+# Scala
+*.class
+*.tasty
+*.jar
+target/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+.metals/
+.bloop/
+
+# Node / React
+web/node_modules/
+web/dist/
+web/.vite/
+web/build/
+*.tsbuildinfo
+
+# Config (contains secrets)
+config/application.conf
+config/*.conf
+!config/application.conf.example
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test artifacts
+coverage/
+.coverage/
+
+# Postgres data (if running locally)
+pgdata/

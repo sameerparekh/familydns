@@ -1,0 +1,105 @@
+package familydns.api.auth
+
+import at.favre.lib.crypto.bcrypt.BCrypt
+import familydns.api.JwtConfig
+import familydns.api.db.*
+import familydns.shared.*
+import pdi.jwt.*
+import pdi.jwt.algorithms.JwtHmacAlgorithm
+import zio.*
+import zio.json.*
+
+import java.time.Instant
+
+// ── JWT Claims ─────────────────────────────────────────────────────────────
+
+case class JwtClaims(
+  sub:      String,   // username
+  role:     String,   // admin | readonly
+  iat:      Long,
+  exp:      Long,
+) derives JsonCodec
+
+// ── Auth errors ────────────────────────────────────────────────────────────
+
+sealed trait AuthError
+object AuthError:
+  case object InvalidCredentials extends AuthError
+  case object TokenExpired        extends AuthError
+  case object InvalidToken        extends AuthError
+  case object Forbidden           extends AuthError
+  case class  Unexpected(msg: String) extends AuthError
+
+// ── Auth service ───────────────────────────────────────────────────────────
+
+trait AuthService:
+  def login(username: String, password: String): IO[AuthError, LoginResponse]
+  def verify(token: String): IO[AuthError, JwtClaims]
+  def requireAdmin(token: String): IO[AuthError, JwtClaims]
+  def changePassword(username: String, current: String, next: String): IO[AuthError, Unit]
+  def hashPassword(password: String): UIO[String]
+
+class AuthServiceLive(
+  userRepo:  UserRepo,
+  jwtConfig: JwtConfig,
+) extends AuthService:
+
+  private val algo: JwtHmacAlgorithm = JwtAlgorithm.HS256
+  private val secret = jwtConfig.secret
+
+  def login(username: String, password: String): IO[AuthError, LoginResponse] =
+    for
+      user  <- userRepo.findByUsername(username)
+                 .mapError(e => AuthError.Unexpected(e.getMessage))
+                 .flatMap(ZIO.fromOption(_).mapError(_ => AuthError.InvalidCredentials))
+      valid <- ZIO.succeed(
+                 BCrypt.verifyer().verify(password.toCharArray, user.passwordHash).verified
+               )
+      _     <- ZIO.fail(AuthError.InvalidCredentials).when(!valid)
+      now   = Instant.now().getEpochSecond
+      claims = JwtClaims(
+                 sub  = user.username,
+                 role = user.role,
+                 iat  = now,
+                 exp  = now + jwtConfig.expiryHours * 3600L,
+               )
+      token <- ZIO.attempt(JwtZIOJson.encode(claims.toJsonAST.toOption.get, secret, algo))
+                 .mapError(e => AuthError.Unexpected(e.getMessage))
+    yield LoginResponse(token, user.role, user.username)
+
+  def verify(token: String): IO[AuthError, JwtClaims] =
+    ZIO.fromTry(JwtZIOJson.decode(token, secret, Seq(algo)))
+      .mapError(_ => AuthError.InvalidToken)
+      .flatMap { json =>
+        ZIO.fromEither(json.as[JwtClaims])
+          .mapError(_ => AuthError.InvalidToken)
+      }
+      .flatMap { claims =>
+        val now = Instant.now().getEpochSecond
+        ZIO.fail(AuthError.TokenExpired).when(claims.exp < now).as(claims)
+      }
+
+  def requireAdmin(token: String): IO[AuthError, JwtClaims] =
+    verify(token).flatMap { claims =>
+      if claims.role == "admin" then ZIO.succeed(claims)
+      else ZIO.fail(AuthError.Forbidden)
+    }
+
+  def changePassword(username: String, current: String, next: String): IO[AuthError, Unit] =
+    for
+      user  <- userRepo.findByUsername(username)
+                 .mapError(e => AuthError.Unexpected(e.getMessage))
+                 .flatMap(ZIO.fromOption(_).mapError(_ => AuthError.InvalidCredentials))
+      valid <- ZIO.succeed(BCrypt.verifyer().verify(current.toCharArray, user.passwordHash).verified)
+      _     <- ZIO.fail(AuthError.InvalidCredentials).when(!valid)
+      hash  <- hashPassword(next)
+      _     <- userRepo.updatePassword(user.id, hash)
+                 .mapError(e => AuthError.Unexpected(e.getMessage))
+    yield ()
+
+  def hashPassword(password: String): UIO[String] =
+    ZIO.succeed(BCrypt.withDefaults().hashToString(12, password.toCharArray))
+
+object AuthService:
+  val layer: ZLayer[UserRepo & JwtConfig, Nothing, AuthService] =
+    ZLayer.fromFunction(AuthServiceLive(_, _))

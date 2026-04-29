@@ -1,0 +1,137 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  # ── Scala: lint, format, test ────────────────────────────────────────────
+  scala:
+    name: Scala Build & Test
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: familydns
+          POSTGRES_PASSWORD: testpassword
+          POSTGRES_DB: familydns_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      FAMILYDNS_DB_HOST: localhost
+      FAMILYDNS_DB_PORT: 5432
+      FAMILYDNS_DB_DATABASE: familydns_test
+      FAMILYDNS_DB_USER: familydns
+      FAMILYDNS_DB_PASSWORD: testpassword
+      FAMILYDNS_JWT_SECRET: test-jwt-secret-for-ci-only
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Cache Mill
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.mill
+            out/
+          key: mill-${{ hashFiles('build.sc') }}
+          restore-keys: mill-
+
+      - name: Install Mill
+        run: |
+          curl -L https://github.com/com-lihaoyi/mill/releases/download/0.11.7/mill \
+            -o /usr/local/bin/mill
+          chmod +x /usr/local/bin/mill
+
+      - name: Check formatting (scalafmt)
+        run: mill __.checkFormatting
+
+      - name: Compile all modules
+        run: mill __.compile
+
+      - name: Run tests — shared
+        run: mill shared.test
+
+      - name: Run tests — api
+        run: mill api.test
+
+      - name: Run tests — dns
+        run: mill dns.test
+
+      - name: Run tests — traffic
+        run: mill traffic.test
+
+      - name: Generate test coverage report
+        run: |
+          mill __.test
+        continue-on-error: true
+
+  # ── React: lint, type-check, build ──────────────────────────────────────
+  frontend:
+    name: Frontend Build & Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: TypeScript type check
+        working-directory: web
+        run: npm run type-check
+
+      - name: ESLint
+        working-directory: web
+        run: npm run lint
+
+      - name: Build
+        working-directory: web
+        run: npm run build
+
+  # ── Security scan ────────────────────────────────────────────────────────
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+        continue-on-error: true
+
+      - name: Upload Trivy SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
+        if: always()
+        continue-on-error: true

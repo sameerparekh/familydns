@@ -1,0 +1,189 @@
+package familydns.api.db
+
+import doobie.*
+import doobie.implicits.*
+import doobie.postgres.implicits.*
+import familydns.shared.*
+import zio.*
+import zio.interop.catz.*
+import java.time.{Instant, LocalDate}
+
+given Meta[List[String]] = Meta[Array[String]].imap(_.toList)(_.toArray)
+
+case class DbUser(id: Long, username: String, passwordHash: String, role: String, createdAt: Instant)
+case class QueryLogInsert(mac: Option[String], deviceName: Option[String], profileId: Option[Long],
+  profileName: Option[String], domain: String, qtype: Int, blocked: Boolean, reason: String, location: Option[String])
+case class LogFilter(mac: Option[String] = None, blocked: Option[Boolean] = None, domain: Option[String] = None,
+  location: Option[String] = None, hours: Int = 24, limit: Int = 200, offset: Int = 0)
+
+trait UserRepo:
+  def findByUsername(u: String): Task[Option[DbUser]]
+  def create(u: String, h: String, r: String): Task[Long]
+  def updatePassword(id: Long, h: String): Task[Unit]
+  def listAll: Task[List[DbUser]]
+  def delete(id: Long): Task[Unit]
+
+trait ProfileRepo:
+  def listAll: Task[List[Profile]]
+  def findById(id: Long): Task[Option[Profile]]
+  def create(name: String, cats: List[String]): Task[Long]
+  def update(p: Profile): Task[Unit]
+  def delete(id: Long): Task[Unit]
+  def setPaused(id: Long, paused: Boolean): Task[Unit]
+
+trait ScheduleRepo:
+  def listAll: Task[List[Schedule]]
+  def listForProfile(pid: Long): Task[List[Schedule]]
+  def replaceForProfile(pid: Long, scheds: List[ScheduleRequest]): Task[Unit]
+
+trait TimeLimitRepo:
+  def findForProfile(pid: Long): Task[Option[TimeLimit]]
+  def upsert(pid: Long, mins: Int): Task[Unit]
+  def delete(pid: Long): Task[Unit]
+  def listAll: Task[List[TimeLimit]]
+
+trait SiteTimeLimitRepo:
+  def listForProfile(pid: Long): Task[List[SiteTimeLimit]]
+  def listAll: Task[List[SiteTimeLimit]]
+  def replaceForProfile(pid: Long, limits: List[SiteTimeLimitRequest]): Task[Unit]
+
+trait DeviceRepo:
+  def listAll: Task[List[Device]]
+  def findByMac(mac: String): Task[Option[Device]]
+  def upsert(mac: String, name: String, pid: Long, ip: String, loc: String): Task[Long]
+  def updateProfile(mac: String, pid: Long): Task[Unit]
+  def delete(mac: String): Task[Unit]
+
+trait BlocklistRepo:
+  def insertBatch(domains: List[(String, String)]): Task[Int]
+  def clearCategory(cat: String): Task[Unit]
+  def listCategories: Task[List[String]]
+  def countByCategory: Task[List[(String, Int)]]
+  def loadCategory(cat: String): Task[Set[String]]
+  def loadAll: Task[Map[String, Set[String]]]
+
+trait TimeUsageRepo:
+  def getUsage(mac: String, domain: String, date: LocalDate): Task[Int]
+  def getTotalUsage(mac: String, date: LocalDate): Task[Int]
+  def incrementUsage(mac: String, domain: String, date: LocalDate, mins: Int): Task[Unit]
+  def listForDevice(mac: String, date: LocalDate): Task[List[TimeUsage]]
+  def snapshotAll(date: LocalDate): Task[Map[(String, String), Int]]
+
+trait TimeExtensionRepo:
+  def getTotalExtension(mac: String, date: LocalDate): Task[Int]
+  def grant(mac: String, date: LocalDate, mins: Int, by: String, note: Option[String]): Task[Long]
+  def listForDevice(mac: String, date: LocalDate): Task[List[TimeExtension]]
+  def snapshotAll(date: LocalDate): Task[Map[String, Int]]
+
+trait QueryLogRepo:
+  def insertBatch(logs: List[QueryLogInsert]): Task[Unit]
+  def query(f: LogFilter): Task[List[QueryLog]]
+  def stats: Task[DashboardStats]
+  def topBlocked(hours: Int, limit: Int): Task[List[DomainCount]]
+
+class UserRepoLive(xa: Transactor[Task]) extends UserRepo:
+  def findByUsername(u: String) = sql"SELECT id,username,password_hash,role,created_at FROM users WHERE username=$u".query[(Long,String,String,String,Instant)].map(DbUser.apply).option.transact(xa)
+  def create(u: String, h: String, r: String) = sql"INSERT INTO users(username,password_hash,role) VALUES($u,$h,$r) RETURNING id".query[Long].unique.transact(xa)
+  def updatePassword(id: Long, h: String) = sql"UPDATE users SET password_hash=$h WHERE id=$id".update.run.transact(xa).unit
+  def listAll = sql"SELECT id,username,password_hash,role,created_at FROM users ORDER BY id".query[(Long,String,String,String,Instant)].map(DbUser.apply).to[List].transact(xa)
+  def delete(id: Long) = sql"DELETE FROM users WHERE id=$id".update.run.transact(xa).unit
+
+class ProfileRepoLive(xa: Transactor[Task]) extends ProfileRepo:
+  private type R = (Long,String,List[String],List[String],List[String],Boolean)
+  private def toP(r: R) = Profile(r._1,r._2,r._3,r._4,r._5,r._6)
+  def listAll = sql"SELECT id,name,blocked_categories,extra_blocked,extra_allowed,paused FROM profiles ORDER BY id".query[R].map(toP).to[List].transact(xa)
+  def findById(id: Long) = sql"SELECT id,name,blocked_categories,extra_blocked,extra_allowed,paused FROM profiles WHERE id=$id".query[R].map(toP).option.transact(xa)
+  def create(name: String, cats: List[String]) = sql"INSERT INTO profiles(name,blocked_categories) VALUES($name,${cats.toArray}) RETURNING id".query[Long].unique.transact(xa)
+  def update(p: Profile) = sql"UPDATE profiles SET name=${p.name},blocked_categories=${p.blockedCategories.toArray},extra_blocked=${p.extraBlocked.toArray},extra_allowed=${p.extraAllowed.toArray},paused=${p.paused} WHERE id=${p.id}".update.run.transact(xa).unit
+  def delete(id: Long) = sql"DELETE FROM profiles WHERE id=$id".update.run.transact(xa).unit
+  def setPaused(id: Long, p: Boolean) = sql"UPDATE profiles SET paused=$p WHERE id=$id".update.run.transact(xa).unit
+
+class ScheduleRepoLive(xa: Transactor[Task]) extends ScheduleRepo:
+  private type R = (Long,Long,String,List[String],String,String)
+  private def toS(r: R) = Schedule(r._1,r._2,r._3,r._4,r._5,r._6)
+  def listAll = sql"SELECT id,profile_id,name,days,block_from,block_until FROM schedules ORDER BY id".query[R].map(toS).to[List].transact(xa)
+  def listForProfile(pid: Long) = sql"SELECT id,profile_id,name,days,block_from,block_until FROM schedules WHERE profile_id=$pid ORDER BY id".query[R].map(toS).to[List].transact(xa)
+  def replaceForProfile(pid: Long, ss: List[ScheduleRequest]) =
+    val del = sql"DELETE FROM schedules WHERE profile_id=$pid".update.run
+    val ins = ss.map(s => sql"INSERT INTO schedules(profile_id,name,days,block_from,block_until) VALUES($pid,${s.name},${s.days.toArray},${s.blockFrom},${s.blockUntil})".update.run)
+    (del *> ins.foldLeft(FC.unit)(_ *> _.void)).transact(xa)
+
+class TimeLimitRepoLive(xa: Transactor[Task]) extends TimeLimitRepo:
+  def findForProfile(pid: Long) = sql"SELECT id,profile_id,daily_minutes FROM time_limits WHERE profile_id=$pid".query[(Long,Long,Int)].map(TimeLimit.apply).option.transact(xa)
+  def upsert(pid: Long, mins: Int) = sql"INSERT INTO time_limits(profile_id,daily_minutes) VALUES($pid,$mins) ON CONFLICT(profile_id) DO UPDATE SET daily_minutes=EXCLUDED.daily_minutes".update.run.transact(xa).unit
+  def delete(pid: Long) = sql"DELETE FROM time_limits WHERE profile_id=$pid".update.run.transact(xa).unit
+  def listAll = sql"SELECT id,profile_id,daily_minutes FROM time_limits".query[(Long,Long,Int)].map(TimeLimit.apply).to[List].transact(xa)
+
+class SiteTimeLimitRepoLive(xa: Transactor[Task]) extends SiteTimeLimitRepo:
+  private type R = (Long,Long,String,Int,String)
+  private def toS(r: R) = SiteTimeLimit(r._1,r._2,r._3,r._4,r._5)
+  def listForProfile(pid: Long) = sql"SELECT id,profile_id,domain_pattern,daily_minutes,label FROM site_time_limits WHERE profile_id=$pid ORDER BY id".query[R].map(toS).to[List].transact(xa)
+  def listAll = sql"SELECT id,profile_id,domain_pattern,daily_minutes,label FROM site_time_limits ORDER BY id".query[R].map(toS).to[List].transact(xa)
+  def replaceForProfile(pid: Long, ls: List[SiteTimeLimitRequest]) =
+    val del = sql"DELETE FROM site_time_limits WHERE profile_id=$pid".update.run
+    val ins = ls.map(l => sql"INSERT INTO site_time_limits(profile_id,domain_pattern,daily_minutes,label) VALUES($pid,${l.domainPattern},${l.dailyMinutes},${l.label})".update.run)
+    (del *> ins.foldLeft(FC.unit)(_ *> _.void)).transact(xa)
+
+class DeviceRepoLive(xa: Transactor[Task]) extends DeviceRepo:
+  def listAll = sql"SELECT d.id,d.mac,d.name,d.profile_id,p.name,d.last_seen_ip,d.last_seen_at::TEXT,d.location FROM devices d LEFT JOIN profiles p ON p.id=d.profile_id ORDER BY d.name".query[(Long,String,String,Option[Long],Option[String],Option[String],Option[String],Option[String])].map(r => Device(r._1,r._2,r._3,r._4.getOrElse(0L),r._5,r._6,r._7,r._8)).to[List].transact(xa)
+  def findByMac(mac: String) = sql"SELECT d.id,d.mac,d.name,d.profile_id,p.name,d.last_seen_ip,d.last_seen_at::TEXT,d.location FROM devices d LEFT JOIN profiles p ON p.id=d.profile_id WHERE d.mac=$mac".query[(Long,String,String,Option[Long],Option[String],Option[String],Option[String],Option[String])].map(r => Device(r._1,r._2,r._3,r._4.getOrElse(0L),r._5,r._6,r._7,r._8)).option.transact(xa)
+  def upsert(mac: String, name: String, pid: Long, ip: String, loc: String) = sql"INSERT INTO devices(mac,name,profile_id,last_seen_ip,last_seen_at,location) VALUES($mac,$name,$pid,$ip,NOW(),$loc) ON CONFLICT(mac) DO UPDATE SET last_seen_ip=EXCLUDED.last_seen_ip,last_seen_at=NOW(),location=EXCLUDED.location RETURNING id".query[Long].unique.transact(xa)
+  def updateProfile(mac: String, pid: Long) = sql"UPDATE devices SET profile_id=$pid WHERE mac=$mac".update.run.transact(xa).unit
+  def delete(mac: String) = sql"DELETE FROM devices WHERE mac=$mac".update.run.transact(xa).unit
+
+class BlocklistRepoLive(xa: Transactor[Task]) extends BlocklistRepo:
+  def insertBatch(ds: List[(String,String)]) = Update[(String,String)]("INSERT INTO blocklist_domains(domain,category) VALUES(?,?) ON CONFLICT DO NOTHING").updateMany(ds).transact(xa)
+  def clearCategory(cat: String) = sql"DELETE FROM blocklist_domains WHERE category=$cat".update.run.transact(xa).unit
+  def listCategories = sql"SELECT DISTINCT category FROM blocklist_domains ORDER BY category".query[String].to[List].transact(xa)
+  def countByCategory = sql"SELECT category,COUNT(*)::INT FROM blocklist_domains GROUP BY category ORDER BY category".query[(String,Int)].to[List].transact(xa)
+  def loadCategory(cat: String) = sql"SELECT domain FROM blocklist_domains WHERE category=$cat".query[String].to[List].transact(xa).map(_.toSet)
+  def loadAll = sql"SELECT category,domain FROM blocklist_domains".query[(String,String)].to[List].transact(xa).map(_.groupBy(_._1).map((k,vs) => k -> vs.map(_._2).toSet))
+
+class TimeUsageRepoLive(xa: Transactor[Task]) extends TimeUsageRepo:
+  def getUsage(mac: String, dom: String, d: LocalDate) = sql"SELECT COALESCE(minutes_used,0) FROM time_usage WHERE device_mac=$mac AND domain=$dom AND date=$d".query[Int].option.transact(xa).map(_.getOrElse(0))
+  def getTotalUsage(mac: String, d: LocalDate) = sql"SELECT COALESCE(SUM(minutes_used),0)::INT FROM time_usage WHERE device_mac=$mac AND date=$d".query[Int].unique.transact(xa)
+  def incrementUsage(mac: String, dom: String, d: LocalDate, mins: Int) = sql"INSERT INTO time_usage(device_mac,domain,date,minutes_used,last_seen_at) VALUES($mac,$dom,$d,$mins,NOW()) ON CONFLICT(device_mac,domain,date) DO UPDATE SET minutes_used=time_usage.minutes_used+EXCLUDED.minutes_used,last_seen_at=NOW()".update.run.transact(xa).unit
+  def listForDevice(mac: String, d: LocalDate) = sql"SELECT id,device_mac,domain,date::TEXT,minutes_used,last_seen_at::TEXT FROM time_usage WHERE device_mac=$mac AND date=$d ORDER BY minutes_used DESC".query[(Long,String,String,String,Int,String)].map(TimeUsage.apply).to[List].transact(xa)
+  def snapshotAll(d: LocalDate) = sql"SELECT device_mac,domain,minutes_used FROM time_usage WHERE date=$d".query[(String,String,Int)].to[List].transact(xa).map(_.map((m,dom,mins) => (m,dom) -> mins).toMap)
+
+class TimeExtensionRepoLive(xa: Transactor[Task]) extends TimeExtensionRepo:
+  def getTotalExtension(mac: String, d: LocalDate) = sql"SELECT COALESCE(SUM(extra_minutes),0)::INT FROM time_extensions WHERE device_mac=$mac AND date=$d".query[Int].unique.transact(xa)
+  def grant(mac: String, d: LocalDate, mins: Int, by: String, note: Option[String]) = sql"INSERT INTO time_extensions(device_mac,date,extra_minutes,granted_by,note) VALUES($mac,$d,$mins,$by,$note) RETURNING id".query[Long].unique.transact(xa)
+  def listForDevice(mac: String, d: LocalDate) = sql"SELECT id,device_mac,date::TEXT,extra_minutes,granted_by,note,created_at::TEXT FROM time_extensions WHERE device_mac=$mac AND date=$d ORDER BY created_at".query[(Long,String,String,Int,String,Option[String],String)].map(TimeExtension.apply).to[List].transact(xa)
+  def snapshotAll(d: LocalDate) = sql"SELECT device_mac,SUM(extra_minutes)::INT FROM time_extensions WHERE date=$d GROUP BY device_mac".query[(String,Int)].to[List].transact(xa).map(_.toMap)
+
+class QueryLogRepoLive(xa: Transactor[Task]) extends QueryLogRepo:
+  def insertBatch(logs: List[QueryLogInsert]) = Update[QueryLogInsert]("INSERT INTO query_logs(mac,device_name,profile_id,profile_name,domain,qtype,blocked,reason,location) VALUES(?,?,?,?,?,?,?,?,?)").updateMany(logs).transact(xa).unit
+  def query(f: LogFilter) =
+    val base  = fr"SELECT id,mac,device_name,profile_id,profile_name,domain,qtype,blocked,reason,location,ts::TEXT FROM query_logs WHERE 1=1"
+    val since = fr"AND ts > NOW() - make_interval(hours => ${f.hours})"
+    val byMac = f.mac.fold(fr"")(m => fr"AND mac=$m")
+    val byBl  = f.blocked.fold(fr"")(b => fr"AND blocked=$b")
+    val byDom = f.domain.fold(fr"")(d => fr"AND domain ILIKE ${s"%$d%"}")
+    val byLoc = f.location.fold(fr"")(l => fr"AND location=$l")
+    (base ++ since ++ byMac ++ byBl ++ byDom ++ byLoc ++ fr"ORDER BY ts DESC LIMIT ${f.limit} OFFSET ${f.offset}")
+      .query[(Long,Option[String],Option[String],Option[Long],Option[String],String,Int,Boolean,String,Option[String],String)]
+      .map(QueryLog.apply).to[List].transact(xa)
+  def stats =
+    for
+      tt  <- sql"SELECT COUNT(*)::INT FROM query_logs WHERE ts > NOW()-INTERVAL '24 hours'".query[Int].unique.transact(xa)
+      bt  <- sql"SELECT COUNT(*)::INT FROM query_logs WHERE ts > NOW()-INTERVAL '24 hours' AND blocked".query[Int].unique.transact(xa)
+      th  <- sql"SELECT COUNT(*)::INT FROM query_logs WHERE ts > NOW()-INTERVAL '1 hour'".query[Int].unique.transact(xa)
+      bh  <- sql"SELECT COUNT(*)::INT FROM query_logs WHERE ts > NOW()-INTERVAL '1 hour' AND blocked".query[Int].unique.transact(xa)
+      top <- sql"SELECT domain,COUNT(*)::INT FROM query_logs WHERE blocked AND ts > NOW()-INTERVAL '24 hours' GROUP BY domain ORDER BY COUNT(*) DESC LIMIT 10".query[(String,Int)].map(DomainCount.apply).to[List].transact(xa)
+      dev <- sql"SELECT COALESCE(mac,'unknown'),COALESCE(device_name,'unknown'),COUNT(*)::INT,SUM(CASE WHEN blocked THEN 1 ELSE 0 END)::INT FROM query_logs WHERE ts > NOW()-INTERVAL '24 hours' GROUP BY mac,device_name ORDER BY COUNT(*) DESC LIMIT 20".query[(String,String,Int,Int)].map(DeviceStats.apply).to[List].transact(xa)
+    yield DashboardStats(tt,bt,th,bh,top,dev)
+  def topBlocked(hours: Int, lim: Int) = sql"SELECT domain,COUNT(*)::INT FROM query_logs WHERE blocked AND ts > NOW() - make_interval(hours => $hours) GROUP BY domain ORDER BY COUNT(*) DESC LIMIT $lim".query[(String,Int)].map(DomainCount.apply).to[List].transact(xa)
+
+object Repos:
+  val userRepo          = ZLayer.fromFunction(UserRepoLive(_))
+  val profileRepo       = ZLayer.fromFunction(ProfileRepoLive(_))
+  val scheduleRepo      = ZLayer.fromFunction(ScheduleRepoLive(_))
+  val timeLimitRepo     = ZLayer.fromFunction(TimeLimitRepoLive(_))
+  val siteTimeLimitRepo = ZLayer.fromFunction(SiteTimeLimitRepoLive(_))
+  val deviceRepo        = ZLayer.fromFunction(DeviceRepoLive(_))
+  val blocklistRepo     = ZLayer.fromFunction(BlocklistRepoLive(_))
+  val timeUsageRepo     = ZLayer.fromFunction(TimeUsageRepoLive(_))
+  val timeExtRepo       = ZLayer.fromFunction(TimeExtensionRepoLive(_))
+  val queryLogRepo      = ZLayer.fromFunction(QueryLogRepoLive(_))
+  val all = userRepo ++ profileRepo ++ scheduleRepo ++ timeLimitRepo ++ siteTimeLimitRepo ++ deviceRepo ++ blocklistRepo ++ timeUsageRepo ++ timeExtRepo ++ queryLogRepo
