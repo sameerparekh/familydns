@@ -119,22 +119,86 @@ export function ProfilesPage() {
   const { isAdmin } = useAuth()
   const [profiles, setProfiles] = useState<ProfileDetail[]>([])
   const [loading,  setLoading]  = useState(true)
+  const [categories, setCategories] = useState<string[]>([])
+  const [adding,   setAdding]   = useState(false)
+  const [form,     setForm]     = useState<{ name: string; blockedCategories: string[]; dailyMinutes: string }>({ name: '', blockedCategories: [], dailyMinutes: '' })
+  const [saving,   setSaving]   = useState(false)
+  const [error,    setError]    = useState<string | null>(null)
+
+  async function refresh() {
+    const p = await api.profiles.list()
+    setProfiles(p)
+  }
 
   useEffect(() => {
-    api.profiles.list().then(setProfiles).finally(() => setLoading(false))
+    Promise.all([
+      api.profiles.list(),
+      api.blocklists.counts().catch(() => [] as { category: string; count: number }[]),
+    ])
+      .then(([p, c]) => { setProfiles(p); setCategories(c.map(x => x.category)) })
+      .finally(() => setLoading(false))
   }, [])
 
   async function togglePause(id: number) {
     await api.profiles.pause(id)
-    const p = await api.profiles.list()
-    setProfiles(p)
+    await refresh()
+  }
+
+  function openAdd() {
+    setForm({ name: '', blockedCategories: [], dailyMinutes: '' })
+    setError(null)
+    setAdding(true)
+  }
+
+  async function saveNew() {
+    if (!form.name.trim()) { setError('Name is required'); return }
+    setSaving(true)
+    setError(null)
+    try {
+      const minutes = form.dailyMinutes.trim()
+      await api.profiles.create({
+        name: form.name.trim(),
+        blockedCategories: form.blockedCategories,
+        extraBlocked: [],
+        extraAllowed: [],
+        paused: false,
+        schedules: [],
+        timeLimit: minutes ? Number(minutes) : null,
+        siteTimeLimits: [],
+      })
+      setAdding(false)
+      await refresh()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  function toggleCategory(c: string) {
+    setForm(f => ({
+      ...f,
+      blockedCategories: f.blockedCategories.includes(c)
+        ? f.blockedCategories.filter(x => x !== c)
+        : [...f.blockedCategories, c],
+    }))
   }
 
   if (loading) return <PageLoader />
 
   return (
     <div className="space-y-6">
-      <h1 className="text-xl font-bold text-white">Profiles</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-bold text-white">Profiles</h1>
+        {isAdmin && (
+          <button
+            onClick={openAdd}
+            className="bg-emerald-500 hover:bg-emerald-400 text-black text-sm font-semibold px-4 py-2 rounded-xl transition-colors"
+          >
+            + Add Profile
+          </button>
+        )}
+      </div>
       <div className="grid gap-4 md:grid-cols-2">
         {profiles.map(pd => (
           <div key={pd.profile.id} className="bg-gray-900 rounded-2xl border border-gray-800 p-5 space-y-4">
@@ -200,6 +264,45 @@ export function ProfilesPage() {
           </div>
         ))}
       </div>
+
+      {adding && (
+        <div className="fixed inset-0 bg-black/70 flex items-end sm:items-center justify-center z-50 p-4">
+          <div className="bg-gray-900 rounded-2xl border border-gray-700 w-full max-w-sm p-6 space-y-4">
+            <h3 className="text-lg font-bold text-white">Add Profile</h3>
+            <Field label="Name" value={form.name} onChange={v => setForm(f => ({...f, name: v}))} placeholder="Kids" />
+            <Field label="Daily Limit (minutes, optional)" value={form.dailyMinutes} onChange={v => setForm(f => ({...f, dailyMinutes: v.replace(/[^0-9]/g, '')}))} placeholder="e.g. 120" />
+            {categories.length > 0 && (
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Blocked Categories</label>
+                <div className="flex flex-wrap gap-2">
+                  {categories.map(c => {
+                    const on = form.blockedCategories.includes(c)
+                    return (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => toggleCategory(c)}
+                        className={`text-xs px-2 py-1 rounded-lg font-mono border transition-colors ${
+                          on
+                            ? 'bg-red-500/20 text-red-300 border-red-500/40'
+                            : 'bg-gray-800 text-gray-400 border-gray-700 hover:bg-gray-700'
+                        }`}
+                      >{c}</button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+            {error && <p className="text-sm text-red-400">{error}</p>}
+            <div className="flex gap-3 pt-2">
+              <button onClick={() => setAdding(false)} disabled={saving} className="flex-1 py-3 rounded-xl bg-gray-800 text-gray-300 font-medium disabled:opacity-50">Cancel</button>
+              <button onClick={saveNew} disabled={saving} className="flex-1 py-3 rounded-xl bg-emerald-500 text-black font-semibold disabled:opacity-50">
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
