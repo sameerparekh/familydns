@@ -34,15 +34,23 @@ case class JwtConfig(
 
 case class DnsClientConfig(
     cacheRefreshSeconds: Int,
+    port: Int,
+    location: String,
+    upstreamPrimary: String,
+    upstreamSecondary: String,
+    upstreamPort: Int,
+    logBatchSize: Int,
+    logFlushSeconds: Int,
 )
 
 object AppConfig:
   val layer: ZLayer[Any, Config.Error, AppConfig] =
     ZLayer.fromZIO:
+      val path = sys.props.getOrElse("config.file", "config/application.conf")
       read(
-        deriveConfig[AppConfig].from(
-          TypesafeConfigProvider.fromHoconFile(
-            new java.io.File("config/application.conf"),
+        deriveConfig[AppConfig]
+          .nested("familydns")
+          .from(
+            TypesafeConfigProvider.fromHoconFile(new java.io.File(path)),
           ),
-        ),
       )

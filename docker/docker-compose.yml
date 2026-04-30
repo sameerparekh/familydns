@@ -49,3 +49,24 @@ services:
       timeout: 3s
       retries: 30
       start_period: 20s
+
+  dns:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      FAMILYDNS_MODE: dns
+      FAMILYDNS_DB_HOST: postgres
+      FAMILYDNS_DB_PORT: "5432"
+      FAMILYDNS_DB_NAME: familydns
+      FAMILYDNS_DB_USER: familydns
+      FAMILYDNS_DB_PASSWORD: familydns
+      FAMILYDNS_JWT_SECRET: "staging-jwt-secret-do-not-use-in-prod-32ch"
+      FAMILYDNS_DNS_REFRESH: "5"
+      FAMILYDNS_DNS_PORT: "5353"
+      FAMILYDNS_DNS_LOCATION: "staging"
+    ports:
+      - "127.0.0.1:5353:5353/udp"
