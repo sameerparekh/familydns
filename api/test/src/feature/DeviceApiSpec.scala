@@ -1,11 +1,14 @@
 package familydns.api.feature
 
+import familydns.api.JwtConfig
 import familydns.api.auth.*
 import familydns.api.db.*
 import familydns.api.routes.*
 import familydns.shared.*
+import familydns.shared.Clock.TestClock
 import familydns.testinfra.*
-import zio.*
+import io.zonky.test.db.postgres.embedded.EmbeddedPostgres
+import zio.{Clock as _, *}
 import zio.http.*
 import zio.json.*
 import zio.test.*
@@ -19,10 +22,10 @@ object DeviceApiSpec extends ZIOSpec[TestDatabase.AllRepos & EmbeddedPostgres & 
   private val adminJwt = JwtConfig(secret = "test-secret-at-least-32-chars!!", expiryHours = 1)
   private def makeAuth = ZIO.serviceWith[UserRepo](ur => AuthServiceLive(ur, adminJwt))
   private def cleanDb  = ZIO.serviceWithZIO[EmbeddedPostgres](pg =>
-    TestDatabase.cleanAndMigrate.provide(ZLayer.succeed(pg)))
+    TestDatabase.cleanAndMigrate.provide(ZLayer.succeed(pg)),
+  )
 
   def spec = suite("Device API")(
-
     test("create and list devices") {
       for
         _           <- cleanDb
@@ -31,30 +34,32 @@ object DeviceApiSpec extends ZIOSpec[TestDatabase.AllRepos & EmbeddedPostgres & 
         auth        <- makeAuth
         token       <- auth.login("admin", "changeme").map(_.token)
         profiles    <- profileRepo.listAll
-        kidsId       = profiles.find(_.name == "Kids").get.id
-        routes       = DeviceRoutes.routes(auth, deviceRepo)
-        body         = UpsertDeviceRequest(
-                         mac       = "aa:bb:cc:dd:ee:ff",
-                         name      = "iPad",
-                         profileId = kidsId,
-                         location  = Some("home"),
-                       ).toJson
-        putReq       = Request.put(URL.decode("/api/devices").toOption.get, Body.fromString(body))
-                         .addHeader(Header.Authorization.render(s"Bearer $token"))
-                         .addHeader(Header.ContentType(MediaType.application.json))
-        putResp     <- routes.runZIO(putReq)
-        getReq       = Request.get(URL.decode("/api/devices").toOption.get)
-                         .addHeader(Header.Authorization.render(s"Bearer $token"))
-        getResp     <- routes.runZIO(getReq)
-        body2       <- getResp.body.asString
-        devices     <- ZIO.fromEither(body2.fromJson[List[Device]])
-      yield
-        assertTrue(putResp.status == Status.Ok) &&
+        kidsId = profiles.find(_.name == "Kids").get.id
+        routes = DeviceRoutes.routes(auth, deviceRepo)
+        body   = UpsertDeviceRequest(
+          mac = "aa:bb:cc:dd:ee:ff",
+          name = "iPad",
+          profileId = kidsId,
+          location = Some("home"),
+        ).toJson
+        putReq = Request
+          .put(URL.decode("/api/devices").toOption.get, Body.fromString(body))
+          .addHeader(Header.Authorization.Bearer(token))
+          .addHeader(Header.ContentType(MediaType.application.json))
+        putResp <- routes.runZIO(putReq)
+        getReq = Request
+          .get(URL.decode("/api/devices").toOption.get)
+          .addHeader(Header.Authorization.Bearer(token))
+        getResp <- routes.runZIO(getReq)
+        body2   <- getResp.body.asString
+        devices <- ZIO.fromEither(body2.fromJson[List[Device]])
+      yield assertTrue(putResp.status == Status.Ok) &&
         assertTrue(devices.exists(_.mac == "aa:bb:cc:dd:ee:ff")) &&
         assertTrue(devices.exists(_.name == "iPad")) &&
-        assertTrue(devices.find(_.mac == "aa:bb:cc:dd:ee:ff").exists(_.profileName.contains("Kids")))
+        assertTrue(
+          devices.find(_.mac == "aa:bb:cc:dd:ee:ff").exists(_.profileName.contains("Kids")),
+        )
     },
-
     test("MAC address is normalised (upper → lower, dashes → colons)") {
       for
         _           <- cleanDb
@@ -63,17 +68,17 @@ object DeviceApiSpec extends ZIOSpec[TestDatabase.AllRepos & EmbeddedPostgres & 
         auth        <- makeAuth
         token       <- auth.login("admin", "changeme").map(_.token)
         profiles    <- profileRepo.listAll
-        kidsId       = profiles.find(_.name == "Kids").get.id
-        routes       = DeviceRoutes.routes(auth, deviceRepo)
-        body         = UpsertDeviceRequest("AA-BB-CC-DD-EE-FF", "Laptop", kidsId, None).toJson
-        req          = Request.put(URL.decode("/api/devices").toOption.get, Body.fromString(body))
-                         .addHeader(Header.Authorization.render(s"Bearer $token"))
-                         .addHeader(Header.ContentType(MediaType.application.json))
-        _           <- routes.runZIO(req)
-        device      <- deviceRepo.findByMac("aa:bb:cc:dd:ee:ff")
+        kidsId = profiles.find(_.name == "Kids").get.id
+        routes = DeviceRoutes.routes(auth, deviceRepo)
+        body   = UpsertDeviceRequest("AA-BB-CC-DD-EE-FF", "Laptop", kidsId, None).toJson
+        req    = Request
+          .put(URL.decode("/api/devices").toOption.get, Body.fromString(body))
+          .addHeader(Header.Authorization.Bearer(token))
+          .addHeader(Header.ContentType(MediaType.application.json))
+        _      <- routes.runZIO(req)
+        device <- deviceRepo.findByMac("aa:bb:cc:dd:ee:ff")
       yield assertTrue(device.isDefined)
     },
-
     test("delete device") {
       for
         _           <- cleanDb
@@ -82,19 +87,18 @@ object DeviceApiSpec extends ZIOSpec[TestDatabase.AllRepos & EmbeddedPostgres & 
         auth        <- makeAuth
         token       <- auth.login("admin", "changeme").map(_.token)
         profiles    <- profileRepo.listAll
-        kidsId       = profiles.find(_.name == "Kids").get.id
-        mac          = "11:22:33:44:55:66"
-        _           <- deviceRepo.upsert(mac, "OldDevice", kidsId, "192.168.1.50", "home")
-        routes       = DeviceRoutes.routes(auth, deviceRepo)
-        delReq       = Request.delete(URL.decode(s"/api/devices/$mac").toOption.get)
-                         .addHeader(Header.Authorization.render(s"Bearer $token"))
-        delResp     <- routes.runZIO(delReq)
-        after       <- deviceRepo.findByMac(mac)
-      yield
-        assertTrue(delResp.status == Status.Ok) &&
+        kidsId = profiles.find(_.name == "Kids").get.id
+        mac    = "11:22:33:44:55:66"
+        _ <- deviceRepo.upsert(mac, "OldDevice", kidsId, "192.168.1.50", "home")
+        routes = DeviceRoutes.routes(auth, deviceRepo)
+        delReq = Request
+          .delete(URL.decode(s"/api/devices/$mac").toOption.get)
+          .addHeader(Header.Authorization.Bearer(token))
+        delResp <- routes.runZIO(delReq)
+        after   <- deviceRepo.findByMac(mac)
+      yield assertTrue(delResp.status == Status.Ok) &&
         assertTrue(after.isEmpty)
     },
-
     test("upsert updates last_seen_ip without losing profile assignment") {
       for
         _           <- cleanDb
@@ -103,15 +107,14 @@ object DeviceApiSpec extends ZIOSpec[TestDatabase.AllRepos & EmbeddedPostgres & 
         auth        <- makeAuth
         token       <- auth.login("admin", "changeme").map(_.token)
         profiles    <- profileRepo.listAll
-        kidsId       = profiles.find(_.name == "Kids").get.id
-        mac          = "aa:bb:cc:00:00:01"
-        _           <- deviceRepo.upsert(mac, "Phone", kidsId, "192.168.1.10", "home")
+        kidsId = profiles.find(_.name == "Kids").get.id
+        mac    = "aa:bb:cc:00:00:01"
+        _      <- deviceRepo.upsert(mac, "Phone", kidsId, "192.168.1.10", "home")
         // Upsert again with different IP (simulating DHCP lease change)
-        _           <- deviceRepo.upsert(mac, "Phone", kidsId, "192.168.1.20", "home")
-        device      <- deviceRepo.findByMac(mac)
-      yield
-        assertTrue(device.exists(_.lastSeenIp.contains("192.168.1.20"))) &&
+        _      <- deviceRepo.upsert(mac, "Phone", kidsId, "192.168.1.20", "home")
+        device <- deviceRepo.findByMac(mac)
+      yield assertTrue(device.exists(_.lastSeenIp.contains("192.168.1.20"))) &&
         assertTrue(device.exists(_.profileId == kidsId))
     },
-  )
+  ) @@ TestAspect.sequential
 }

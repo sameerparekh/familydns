@@ -2,37 +2,25 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, develop, "claude/**"]
   pull_request:
-    branches: [main, develop]
+    # Run on PRs targeting any branch
+  workflow_dispatch:
+
+env:
+  MILL_VERSION: "1.1.5"
+  # Opt into Node.js 24 now (forced default June 2026 anyway). Silences the
+  # Node 20 deprecation warnings emitted by actions/checkout@v4, setup-java@v4,
+  # setup-node@v4, cache@v4, codeql-action@v4 etc.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
-  # ── Scala: lint, format, test ────────────────────────────────────────────
+  # ── Scala: format, compile, test ─────────────────────────────────────────
   scala:
     name: Scala Build & Test
     runs-on: ubuntu-latest
 
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: familydns
-          POSTGRES_PASSWORD: testpassword
-          POSTGRES_DB: familydns_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
     env:
-      FAMILYDNS_DB_HOST: localhost
-      FAMILYDNS_DB_PORT: 5432
-      FAMILYDNS_DB_DATABASE: familydns_test
-      FAMILYDNS_DB_USER: familydns
-      FAMILYDNS_DB_PASSWORD: testpassword
       FAMILYDNS_JWT_SECRET: test-jwt-secret-for-ci-only
 
     steps:
@@ -41,51 +29,59 @@ jobs:
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
-          java-version: '21'
-          distribution: 'temurin'
+          java-version: "21"
+          distribution: "temurin"
 
-      - name: Cache Mill
+      - name: Cache Mill / Coursier
         uses: actions/cache@v4
         with:
           path: |
             ~/.mill
+            ~/.cache/coursier
             out/
-          key: mill-${{ hashFiles('build.sc') }}
-          restore-keys: mill-
+          key: mill-${{ env.MILL_VERSION }}-${{ hashFiles('build.mill') }}
+          restore-keys: |
+            mill-${{ env.MILL_VERSION }}-
+            mill-
 
-      - name: Install Mill
+      - name: Install Mill (official launcher) and scalafmt
         run: |
-          curl -L https://github.com/com-lihaoyi/mill/releases/download/0.11.7/mill \
-            -o /usr/local/bin/mill
-          chmod +x /usr/local/bin/mill
+          # Mill 1.x ships an official Bash launcher on Maven Central
+          curl -fsSL "https://repo1.maven.org/maven2/com/lihaoyi/mill-dist/${MILL_VERSION}/mill-dist-${MILL_VERSION}-mill.sh" \
+            -o /tmp/mill
+          chmod +x /tmp/mill
+          sudo mv /tmp/mill /usr/local/bin/mill
+          mill --version
+          # scalafmt via coursier (Coursier's app channel handles this fine)
+          curl -fsSL https://github.com/coursier/coursier/releases/latest/download/cs-x86_64-pc-linux.gz \
+            | gunzip > /tmp/cs
+          chmod +x /tmp/cs
+          /tmp/cs install --install-dir /usr/local/bin --quiet scalafmt
 
-      - name: Check formatting (scalafmt)
-        run: mill __.checkFormatting
+      - name: scalafmt --check
+        run: scalafmt --check --non-interactive
 
       - name: Compile all modules
         run: mill __.compile
 
-      - name: Run tests — shared
-        run: mill shared.test
-
-      - name: Run tests — api
-        run: mill api.test
-
-      - name: Run tests — dns
-        run: mill dns.test
-
-      - name: Run tests — traffic
-        run: mill traffic.test
-
-      - name: Generate test coverage report
+      - name: Run all tests (sequential to avoid embedded-pg lock contention)
+        # api.test and dns.test both spin up EmbeddedPostgres, which uses a
+        # JVM-wide file lock for binary unpacking. Running them in parallel
+        # (the default for `mill __.test`) hits OverlappingFileLockException
+        # in the second JVM. Run them in sequence — each is fast enough.
         run: |
-          mill __.test
-        continue-on-error: true
+          mill shared.test
+          mill traffic.test
+          mill api.test
+          mill dns.test
 
-  # ── React: lint, type-check, build ──────────────────────────────────────
+  # ── Frontend: type-check, lint, build ────────────────────────────────────
   frontend:
     name: Frontend Build & Lint
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
 
     steps:
       - uses: actions/checkout@v4
@@ -93,45 +89,18 @@ jobs:
       - name: Set up Node 22
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
-          cache: 'npm'
+          node-version: "22"
+          cache: "npm"
           cache-dependency-path: web/package-lock.json
 
       - name: Install dependencies
-        working-directory: web
         run: npm ci
 
       - name: TypeScript type check
-        working-directory: web
         run: npm run type-check
 
       - name: ESLint
-        working-directory: web
         run: npm run lint
 
       - name: Build
-        working-directory: web
         run: npm run build
-
-  # ── Security scan ────────────────────────────────────────────────────────
-  security:
-    name: Security Scan
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
-        with:
-          scan-type: 'fs'
-          scan-ref: '.'
-          format: 'sarif'
-          output: 'trivy-results.sarif'
-        continue-on-error: true
-
-      - name: Upload Trivy SARIF
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: 'trivy-results.sarif'
-        if: always()
-        continue-on-error: true

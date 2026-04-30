@@ -42,3 +42,6 @@ coverage/
 
 # Postgres data (if running locally)
 pgdata/
+
+# Mill 1.x temp files (mktemp pattern)
+mill.??????

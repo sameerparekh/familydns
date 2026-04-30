@@ -2,7 +2,7 @@ package familydns.shared
 
 import zio.*
 
-import java.time.{LocalDate, LocalDateTime, LocalTime, ZoneId}
+import java.time.{LocalDate, LocalDateTime, LocalTime}
 
 /** Injectable clock — never call java.time directly outside this service. */
 trait Clock:
@@ -14,8 +14,8 @@ object Clock:
 
   // ── Accessors (call these everywhere) ───────────────────────────────────
 
-  def now: URIO[Clock, LocalDateTime]  = ZIO.serviceWithZIO(_.now)
-  def today: URIO[Clock, LocalDate]    = ZIO.serviceWithZIO(_.today)
+  def now: URIO[Clock, LocalDateTime]     = ZIO.serviceWithZIO(_.now)
+  def today: URIO[Clock, LocalDate]       = ZIO.serviceWithZIO(_.today)
   def currentTime: URIO[Clock, LocalTime] = ZIO.serviceWithZIO(_.currentTime)
 
   // ── Live implementation ──────────────────────────────────────────────────
@@ -23,8 +23,8 @@ object Clock:
   val live: ULayer[Clock] = ZLayer.succeed(LiveClock())
 
   private class LiveClock extends Clock:
-    def now: UIO[LocalDateTime]  = ZIO.succeed(LocalDateTime.now())
-    def today: UIO[LocalDate]    = ZIO.succeed(LocalDate.now())
+    def now: UIO[LocalDateTime]     = ZIO.succeed(LocalDateTime.now())
+    def today: UIO[LocalDate]       = ZIO.succeed(LocalDate.now())
     def currentTime: UIO[LocalTime] = ZIO.succeed(LocalTime.now())
 
   // ── Controllable test implementation ────────────────────────────────────
@@ -54,21 +54,18 @@ object Clock:
   object TestClock:
     /** Create a TestClock starting at the given datetime. */
     def at(dt: LocalDateTime): ULayer[Clock & TestClock] =
-      ZLayer.fromZIO(
-        Ref.make(dt).map(r => new TestClock(r))
-      ).project(tc => tc: Clock).merge(
-        ZLayer.fromZIO(
-          Ref.make(dt).map(r => new TestClock(r))
-        )
-      )
+      ZLayer.fromZIO(Ref.make(dt).map(new TestClock(_))).flatMap { env =>
+        val tc = env.get[TestClock]
+        ZLayer.succeed[Clock](tc) ++ ZLayer.succeed(tc)
+      }
 
     /**
-     * Simpler API: make(dt) returns both Clock and TestClock as the same instance.
-     * Usage: TestClock.make(...) >>> yourLayer
+     * Simpler API: make(dt) returns both Clock and TestClock as the same instance. Usage:
+     * TestClock.make(...) >>> yourLayer
      */
     def make(dt: LocalDateTime): ULayer[Clock] =
       ZLayer.fromZIO(
-        Ref.make(dt).map(new TestClock(_))
+        Ref.make(dt).map(new TestClock(_)),
       )
 
     def makeWithControl(dt: LocalDateTime): UIO[(Clock, TestClock)] =

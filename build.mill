@@ -1,0 +1,137 @@
+import mill._
+import mill.scalalib._
+
+val scala3Version = "3.3.3"
+
+val zioVersion         = "2.1.9"
+val zioHttpVersion     = "3.0.1"
+val zioJsonVersion     = "0.7.3"
+val zioConfigVersion   = "4.0.2"
+val zioLoggingVersion  = "2.3.1"
+val doobieVersion      = "1.0.0-RC5"
+val flywayVersion      = "10.17.3"
+val jwtVersion         = "10.0.1"
+val bcryptVersion      = "0.10.2"
+val postgresVersion    = "42.7.4"
+val logbackVersion     = "1.5.8"
+val pcap4jVersion      = "1.8.2"
+val embeddedPgVersion  = "2.1.0"
+val flywayPgVersion    = "10.17.3"
+
+trait CommonModule extends ScalaModule {
+  def scalaVersion = scala3Version
+  def scalacOptions = Seq(
+    "-deprecation",
+    "-feature",
+    "-unchecked",
+    "-Wunused:all",
+    "-Wvalue-discard",
+    "-Xfatal-warnings",
+    "-source:future",
+  )
+}
+
+trait FamilyDnsTestModule extends TestModule.ZioTest {
+  def testFramework = "zio.test.sbt.ZTestFramework"
+  def mvnDeps = super.mvnDeps() ++ Seq(
+    mvn"dev.zio::zio-test:$zioVersion",
+    mvn"dev.zio::zio-test-sbt:$zioVersion",
+    mvn"dev.zio::zio-test-magnolia:$zioVersion",
+    mvn"io.zonky.test:embedded-postgres:$embeddedPgVersion",
+    mvn"org.flywaydb:flyway-core:$flywayVersion",
+    mvn"org.flywaydb:flyway-database-postgresql:$flywayPgVersion",
+    mvn"org.postgresql:postgresql:$postgresVersion",
+    mvn"ch.qos.logback:logback-classic:$logbackVersion",
+  )
+}
+
+// ── Shared ─────────────────────────────────────────────────────────────────
+object shared extends CommonModule {
+  def mvnDeps = Seq(
+    mvn"dev.zio::zio:$zioVersion",
+    mvn"dev.zio::zio-json:$zioJsonVersion",
+  )
+  object test extends ScalaTests with FamilyDnsTestModule
+}
+
+// ── API ────────────────────────────────────────────────────────────────────
+object api extends CommonModule {
+  def moduleDeps = Seq(shared)
+  def mvnDeps = Seq(
+    mvn"dev.zio::zio:$zioVersion",
+    mvn"dev.zio::zio-streams:$zioVersion",
+    mvn"dev.zio::zio-http:$zioHttpVersion",
+    mvn"dev.zio::zio-json:$zioJsonVersion",
+    mvn"dev.zio::zio-config:$zioConfigVersion",
+    mvn"dev.zio::zio-config-typesafe:$zioConfigVersion",
+    mvn"dev.zio::zio-config-magnolia:$zioConfigVersion",
+    mvn"dev.zio::zio-logging:$zioLoggingVersion",
+    mvn"dev.zio::zio-logging-slf4j:$zioLoggingVersion",
+    mvn"org.tpolecat::doobie-core:$doobieVersion",
+    mvn"org.tpolecat::doobie-postgres:$doobieVersion",
+    mvn"org.tpolecat::doobie-hikari:$doobieVersion",
+    mvn"org.flywaydb:flyway-core:$flywayVersion",
+    mvn"org.flywaydb:flyway-database-postgresql:$flywayPgVersion",
+    mvn"com.github.jwt-scala::jwt-core:$jwtVersion",
+    mvn"com.github.jwt-scala::jwt-zio-json:$jwtVersion",
+    mvn"at.favre.lib:bcrypt:$bcryptVersion",
+    mvn"org.postgresql:postgresql:$postgresVersion",
+    mvn"ch.qos.logback:logback-classic:$logbackVersion",
+    mvn"dev.zio::zio-interop-cats:23.1.0.3",
+  )
+  override def resources: T[Seq[PathRef]] = Task {
+    super.resources() ++ Seq(PathRef(os.pwd / "api" / "src" / "db" / "migrations"))
+  }
+  object test extends ScalaTests with FamilyDnsTestModule {
+    def moduleDeps = super.moduleDeps ++ Seq(api)
+    def mvnDeps = super.mvnDeps() ++ Seq(
+      mvn"dev.zio::zio-http-testkit:$zioHttpVersion",
+    )
+  }
+}
+
+// ── DNS ────────────────────────────────────────────────────────────────────
+object dns extends CommonModule {
+  def moduleDeps = Seq(shared)
+  def mvnDeps = Seq(
+    mvn"dev.zio::zio:$zioVersion",
+    mvn"dev.zio::zio-streams:$zioVersion",
+    mvn"dev.zio::zio-config:$zioConfigVersion",
+    mvn"dev.zio::zio-config-typesafe:$zioConfigVersion",
+    mvn"dev.zio::zio-config-magnolia:$zioConfigVersion",
+    mvn"dev.zio::zio-logging:$zioLoggingVersion",
+    mvn"dev.zio::zio-logging-slf4j:$zioLoggingVersion",
+    mvn"org.tpolecat::doobie-core:$doobieVersion",
+    mvn"org.tpolecat::doobie-postgres:$doobieVersion",
+    mvn"org.tpolecat::doobie-hikari:$doobieVersion",
+    mvn"org.postgresql:postgresql:$postgresVersion",
+    mvn"ch.qos.logback:logback-classic:$logbackVersion",
+  )
+  object test extends ScalaTests with FamilyDnsTestModule {
+    def moduleDeps = super.moduleDeps ++ Seq(dns, api, api.test)
+  }
+}
+
+// ── Traffic ────────────────────────────────────────────────────────────────
+object traffic extends CommonModule {
+  def moduleDeps = Seq(shared)
+  def mvnDeps = Seq(
+    mvn"dev.zio::zio:$zioVersion",
+    mvn"dev.zio::zio-streams:$zioVersion",
+    mvn"dev.zio::zio-config:$zioConfigVersion",
+    mvn"dev.zio::zio-config-typesafe:$zioConfigVersion",
+    mvn"dev.zio::zio-config-magnolia:$zioConfigVersion",
+    mvn"dev.zio::zio-logging:$zioLoggingVersion",
+    mvn"dev.zio::zio-logging-slf4j:$zioLoggingVersion",
+    mvn"org.pcap4j:pcap4j-core:$pcap4jVersion",
+    mvn"org.pcap4j:pcap4j-packetfactory-static:$pcap4jVersion",
+    mvn"org.tpolecat::doobie-core:$doobieVersion",
+    mvn"org.tpolecat::doobie-postgres:$doobieVersion",
+    mvn"org.tpolecat::doobie-hikari:$doobieVersion",
+    mvn"org.postgresql:postgresql:$postgresVersion",
+    mvn"ch.qos.logback:logback-classic:$logbackVersion",
+  )
+  object test extends ScalaTests with FamilyDnsTestModule {
+    def moduleDeps = super.moduleDeps ++ Seq(traffic)
+  }
+}

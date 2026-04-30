@@ -1,18 +1,20 @@
 package familydns.api.feature
 
+import familydns.api.JwtConfig
 import familydns.api.auth.*
 import familydns.api.db.*
 import familydns.api.routes.*
 import familydns.shared.*
 import familydns.shared.Clock.TestClock
 import familydns.testinfra.*
-import zio.*
+import io.zonky.test.db.postgres.embedded.EmbeddedPostgres
+import zio.{Clock as _, *}
 import zio.http.*
 import zio.json.*
 import zio.test.*
 import zio.test.Assertion.*
 
-import java.time.{LocalDate, LocalDateTime}
+import java.time.LocalDate
 
 object TimeApiSpec extends ZIOSpec[TestDatabase.AllRepos & EmbeddedPostgres & Clock] {
 
@@ -22,13 +24,12 @@ object TimeApiSpec extends ZIOSpec[TestDatabase.AllRepos & EmbeddedPostgres & Cl
   private val jwtCfg   = JwtConfig(secret = "test-secret-at-least-32-chars!!", expiryHours = 1)
   private def makeAuth = ZIO.serviceWith[UserRepo](ur => AuthServiceLive(ur, jwtCfg))
   private def cleanDb  = ZIO.serviceWithZIO[EmbeddedPostgres](pg =>
-    TestDatabase.cleanAndMigrate.provide(ZLayer.succeed(pg)))
+    TestDatabase.cleanAndMigrate.provide(ZLayer.succeed(pg)),
+  )
 
-  private val testMac   = "aa:bb:cc:dd:ee:01"
-  private val testMac2  = "aa:bb:cc:dd:ee:02"
+  private val testMac = "aa:bb:cc:dd:ee:01"
 
   def spec = suite("Time API")(
-
     suite("GET /api/time/status")(
       test("shows zero usage for a new device") {
         for
@@ -45,20 +46,27 @@ object TimeApiSpec extends ZIOSpec[TestDatabase.AllRepos & EmbeddedPostgres & Cl
           kidsId      <- TestLayers.seedKidsProfile(profileRepo, schedRepo)
           _           <- tlRepo.upsert(kidsId, 120)
           _           <- TestLayers.seedDevice(deviceRepo, testMac, "iPad", kidsId)
-          routes       = TimeRoutes.routes(auth, deviceRepo, tlRepo, stlRepo, usageRepo, extRepo, profileRepo)
-          req          = Request.get(URL.decode(s"/api/time/status/$testMac").toOption.get)
-                           .addHeader(Header.Authorization.render(s"Bearer $token"))
-          resp        <- routes.runZIO(req)
-          body        <- resp.body.asString
-          status      <- ZIO.fromEither(body.fromJson[DeviceTimeStatus])
-        yield
-          assertTrue(resp.status == Status.Ok) &&
+          routes = TimeRoutes.routes(
+            auth,
+            deviceRepo,
+            tlRepo,
+            stlRepo,
+            usageRepo,
+            extRepo,
+            profileRepo,
+          )
+          req    = Request
+            .get(URL.decode(s"/api/time/status/$testMac").toOption.get)
+            .addHeader(Header.Authorization.Bearer(token))
+          resp   <- routes.runZIO(req)
+          body   <- resp.body.asString
+          status <- ZIO.fromEither(body.fromJson[DeviceTimeStatus])
+        yield assertTrue(resp.status == Status.Ok) &&
           assertTrue(status.dailyLimitMins.contains(120)) &&
           assertTrue(status.usedMins == 0) &&
           assertTrue(status.extensionMins == 0) &&
           assertTrue(status.remainingMins.contains(120))
       },
-
       test("reflects accumulated usage correctly") {
         for
           _           <- cleanDb
@@ -74,20 +82,27 @@ object TimeApiSpec extends ZIOSpec[TestDatabase.AllRepos & EmbeddedPostgres & Cl
           kidsId      <- TestLayers.seedKidsProfile(profileRepo, schedRepo)
           _           <- tlRepo.upsert(kidsId, 120)
           _           <- TestLayers.seedDevice(deviceRepo, testMac, "iPad", kidsId)
-          today        = LocalDate.now()
-          _           <- usageRepo.incrementUsage(testMac, "minecraft.net", today, 45)
-          _           <- usageRepo.incrementUsage(testMac, "google.com", today, 30)
-          routes       = TimeRoutes.routes(auth, deviceRepo, tlRepo, stlRepo, usageRepo, extRepo, profileRepo)
-          req          = Request.get(URL.decode(s"/api/time/status/$testMac").toOption.get)
-                           .addHeader(Header.Authorization.render(s"Bearer $token"))
-          resp        <- routes.runZIO(req)
-          body        <- resp.body.asString
-          status      <- ZIO.fromEither(body.fromJson[DeviceTimeStatus])
-        yield
-          assertTrue(status.usedMins == 75) &&
+          today = LocalDate.now()
+          _ <- usageRepo.incrementUsage(testMac, "minecraft.net", today, 45)
+          _ <- usageRepo.incrementUsage(testMac, "google.com", today, 30)
+          routes = TimeRoutes.routes(
+            auth,
+            deviceRepo,
+            tlRepo,
+            stlRepo,
+            usageRepo,
+            extRepo,
+            profileRepo,
+          )
+          req    = Request
+            .get(URL.decode(s"/api/time/status/$testMac").toOption.get)
+            .addHeader(Header.Authorization.Bearer(token))
+          resp   <- routes.runZIO(req)
+          body   <- resp.body.asString
+          status <- ZIO.fromEither(body.fromJson[DeviceTimeStatus])
+        yield assertTrue(status.usedMins == 75) &&
           assertTrue(status.remainingMins.contains(45))
       },
-
       test("site-specific usage shown separately and not counted in total") {
         for
           _           <- cleanDb
@@ -102,29 +117,41 @@ object TimeApiSpec extends ZIOSpec[TestDatabase.AllRepos & EmbeddedPostgres & Cl
           token       <- auth.login("admin", "changeme").map(_.token)
           kidsId      <- TestLayers.seedKidsProfile(profileRepo, schedRepo)
           _           <- tlRepo.upsert(kidsId, 120)
-          _           <- stlRepo.replaceForProfile(kidsId, List(
-                           SiteTimeLimitRequest("*.youtube.com", 30, "YouTube")
-                         ))
+          _           <- stlRepo.replaceForProfile(
+            kidsId,
+            List(
+              SiteTimeLimitRequest("*.youtube.com", 30, "YouTube"),
+            ),
+          )
           _           <- TestLayers.seedDevice(deviceRepo, testMac, "iPad", kidsId)
-          today        = LocalDate.now()
+          today = LocalDate.now()
           // 60 min general browsing + 20 min YouTube (site-specific, should NOT count toward 120)
-          _           <- usageRepo.incrementUsage(testMac, "google.com", today, 60)
-          _           <- usageRepo.incrementUsage(testMac, "youtube.com", today, 20)
-          routes       = TimeRoutes.routes(auth, deviceRepo, tlRepo, stlRepo, usageRepo, extRepo, profileRepo)
-          req          = Request.get(URL.decode(s"/api/time/status/$testMac").toOption.get)
-                           .addHeader(Header.Authorization.render(s"Bearer $token"))
-          resp        <- routes.runZIO(req)
-          body        <- resp.body.asString
-          status      <- ZIO.fromEither(body.fromJson[DeviceTimeStatus])
-        yield
-          assertTrue(status.usedMins == 60) &&            // YouTube NOT counted in total
+          _ <- usageRepo.incrementUsage(testMac, "google.com", today, 60)
+          _ <- usageRepo.incrementUsage(testMac, "youtube.com", today, 20)
+          routes = TimeRoutes.routes(
+            auth,
+            deviceRepo,
+            tlRepo,
+            stlRepo,
+            usageRepo,
+            extRepo,
+            profileRepo,
+          )
+          req    = Request
+            .get(URL.decode(s"/api/time/status/$testMac").toOption.get)
+            .addHeader(Header.Authorization.Bearer(token))
+          resp   <- routes.runZIO(req)
+          body   <- resp.body.asString
+          status <- ZIO.fromEither(body.fromJson[DeviceTimeStatus])
+        yield assertTrue(status.usedMins == 60) && // YouTube NOT counted in total
           assertTrue(status.remainingMins.contains(60)) &&
-          assertTrue(status.siteUsage.exists(su =>
-            su.label == "YouTube" && su.usedMins == 20 && su.remainingMins == 10
-          ))
+          assertTrue(
+            status.siteUsage.exists(su =>
+              su.label == "YouTube" && su.usedMins == 20 && su.remainingMins == 10,
+            ),
+          )
       },
     ),
-
     suite("POST /api/time/extend")(
       test("admin can grant time extension which increases remaining") {
         for
@@ -141,28 +168,36 @@ object TimeApiSpec extends ZIOSpec[TestDatabase.AllRepos & EmbeddedPostgres & Cl
           kidsId      <- TestLayers.seedKidsProfile(profileRepo, schedRepo)
           _           <- tlRepo.upsert(kidsId, 120)
           _           <- TestLayers.seedDevice(deviceRepo, testMac, "iPad", kidsId)
-          today        = LocalDate.now()
+          today = LocalDate.now()
           // Use up all 120 minutes
-          _           <- usageRepo.incrementUsage(testMac, "minecraft.net", today, 120)
-          routes       = TimeRoutes.routes(auth, deviceRepo, tlRepo, stlRepo, usageRepo, extRepo, profileRepo)
+          _ <- usageRepo.incrementUsage(testMac, "minecraft.net", today, 120)
+          routes  = TimeRoutes.routes(
+            auth,
+            deviceRepo,
+            tlRepo,
+            stlRepo,
+            usageRepo,
+            extRepo,
+            profileRepo,
+          )
           // Grant 30 min extension
-          extBody      = GrantExtensionRequest(testMac, 30, Some("Homework finished early")).toJson
-          extReq       = Request.post(URL.decode("/api/time/extend").toOption.get, Body.fromString(extBody))
-                           .addHeader(Header.Authorization.render(s"Bearer $token"))
-                           .addHeader(Header.ContentType(MediaType.application.json))
-          extResp     <- routes.runZIO(extReq)
+          extBody = GrantExtensionRequest(testMac, 30, Some("Homework finished early")).toJson
+          extReq  = Request
+            .post(URL.decode("/api/time/extend").toOption.get, Body.fromString(extBody))
+            .addHeader(Header.Authorization.Bearer(token))
+            .addHeader(Header.ContentType(MediaType.application.json))
+          extResp <- routes.runZIO(extReq)
           // Check status shows 30 remaining
-          statusReq    = Request.get(URL.decode(s"/api/time/status/$testMac").toOption.get)
-                           .addHeader(Header.Authorization.render(s"Bearer $token"))
-          statusResp  <- routes.runZIO(statusReq)
-          body        <- statusResp.body.asString
-          status      <- ZIO.fromEither(body.fromJson[DeviceTimeStatus])
-        yield
-          assertTrue(extResp.status == Status.Ok) &&
+          statusReq = Request
+            .get(URL.decode(s"/api/time/status/$testMac").toOption.get)
+            .addHeader(Header.Authorization.Bearer(token))
+          statusResp <- routes.runZIO(statusReq)
+          body       <- statusResp.body.asString
+          status     <- ZIO.fromEither(body.fromJson[DeviceTimeStatus])
+        yield assertTrue(extResp.status == Status.Ok) &&
           assertTrue(status.extensionMins == 30) &&
           assertTrue(status.remainingMins.contains(30))
       },
-
       test("extension is logged with granting admin username") {
         for
           _           <- cleanDb
@@ -178,20 +213,27 @@ object TimeApiSpec extends ZIOSpec[TestDatabase.AllRepos & EmbeddedPostgres & Cl
           kidsId      <- TestLayers.seedKidsProfile(profileRepo, schedRepo)
           _           <- tlRepo.upsert(kidsId, 60)
           _           <- TestLayers.seedDevice(deviceRepo, testMac, "iPad", kidsId)
-          routes       = TimeRoutes.routes(auth, deviceRepo, tlRepo, stlRepo, usageRepo, extRepo, profileRepo)
-          body         = GrantExtensionRequest(testMac, 15, Some("Good behavior")).toJson
-          req          = Request.post(URL.decode("/api/time/extend").toOption.get, Body.fromString(body))
-                           .addHeader(Header.Authorization.render(s"Bearer $token"))
-                           .addHeader(Header.ContentType(MediaType.application.json))
-          _           <- routes.runZIO(req)
-          exts        <- extRepo.listForDevice(testMac, today = LocalDate.now())
-        yield
-          assertTrue(exts.length == 1) &&
+          routes = TimeRoutes.routes(
+            auth,
+            deviceRepo,
+            tlRepo,
+            stlRepo,
+            usageRepo,
+            extRepo,
+            profileRepo,
+          )
+          body   = GrantExtensionRequest(testMac, 15, Some("Good behavior")).toJson
+          req    = Request
+            .post(URL.decode("/api/time/extend").toOption.get, Body.fromString(body))
+            .addHeader(Header.Authorization.Bearer(token))
+            .addHeader(Header.ContentType(MediaType.application.json))
+          _    <- routes.runZIO(req)
+          exts <- extRepo.listForDevice(testMac, LocalDate.now())
+        yield assertTrue(exts.length == 1) &&
           assertTrue(exts.head.grantedBy == "admin") &&
           assertTrue(exts.head.extraMinutes == 15) &&
           assertTrue(exts.head.note.contains("Good behavior"))
       },
-
       test("readonly user cannot grant extensions") {
         for
           _           <- cleanDb
@@ -209,14 +251,22 @@ object TimeApiSpec extends ZIOSpec[TestDatabase.AllRepos & EmbeddedPostgres & Cl
           token       <- auth.login("kidview", "pass").map(_.token)
           kidsId      <- TestLayers.seedKidsProfile(profileRepo, schedRepo)
           _           <- TestLayers.seedDevice(deviceRepo, testMac, "iPad", kidsId)
-          routes       = TimeRoutes.routes(auth, deviceRepo, tlRepo, stlRepo, usageRepo, extRepo, profileRepo)
-          body         = GrantExtensionRequest(testMac, 30, None).toJson
-          req          = Request.post(URL.decode("/api/time/extend").toOption.get, Body.fromString(body))
-                           .addHeader(Header.Authorization.render(s"Bearer $token"))
-          resp        <- routes.runZIO(req)
+          routes = TimeRoutes.routes(
+            auth,
+            deviceRepo,
+            tlRepo,
+            stlRepo,
+            usageRepo,
+            extRepo,
+            profileRepo,
+          )
+          body   = GrantExtensionRequest(testMac, 30, None).toJson
+          req    = Request
+            .post(URL.decode("/api/time/extend").toOption.get, Body.fromString(body))
+            .addHeader(Header.Authorization.Bearer(token))
+          resp <- routes.runZIO(req)
         yield assertTrue(resp.status == Status.Forbidden)
       },
-
       test("multiple extensions accumulate") {
         for
           _           <- cleanDb
@@ -232,23 +282,33 @@ object TimeApiSpec extends ZIOSpec[TestDatabase.AllRepos & EmbeddedPostgres & Cl
           kidsId      <- TestLayers.seedKidsProfile(profileRepo, schedRepo)
           _           <- tlRepo.upsert(kidsId, 60)
           _           <- TestLayers.seedDevice(deviceRepo, testMac, "iPad", kidsId)
-          routes       = TimeRoutes.routes(auth, deviceRepo, tlRepo, stlRepo, usageRepo, extRepo, profileRepo)
-          grant        = (mins: Int) =>
-                           routes.runZIO(
-                             Request.post(URL.decode("/api/time/extend").toOption.get,
-                               Body.fromString(GrantExtensionRequest(testMac, mins, None).toJson))
-                               .addHeader(Header.Authorization.render(s"Bearer $token"))
-                               .addHeader(Header.ContentType(MediaType.application.json))
-                           )
-          _           <- grant(15)
-          _           <- grant(15)
-          _           <- grant(30)
-          exts        <- extRepo.listForDevice(testMac, LocalDate.now())
-          total       <- extRepo.getTotalExtension(testMac, LocalDate.now())
-        yield
-          assertTrue(exts.length == 3) &&
+          routes = TimeRoutes.routes(
+            auth,
+            deviceRepo,
+            tlRepo,
+            stlRepo,
+            usageRepo,
+            extRepo,
+            profileRepo,
+          )
+          grant  = (mins: Int) =>
+            routes.runZIO(
+              Request
+                .post(
+                  URL.decode("/api/time/extend").toOption.get,
+                  Body.fromString(GrantExtensionRequest(testMac, mins, None).toJson),
+                )
+                .addHeader(Header.Authorization.Bearer(token))
+                .addHeader(Header.ContentType(MediaType.application.json)),
+            )
+          _     <- grant(15)
+          _     <- grant(15)
+          _     <- grant(30)
+          exts  <- extRepo.listForDevice(testMac, LocalDate.now())
+          total <- extRepo.getTotalExtension(testMac, LocalDate.now())
+        yield assertTrue(exts.length == 3) &&
           assertTrue(total == 60)
       },
     ),
-  )
+  ) @@ TestAspect.sequential
 }
