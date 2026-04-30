@@ -8,8 +8,6 @@ name: E2E (staging stack) + promote production
 on:
   push:
     branches: [main]
-  pull_request:
-    branches: [main, production]
   workflow_dispatch:
 
 # Only one promotion can run at a time — avoids racing fast-forwards.
