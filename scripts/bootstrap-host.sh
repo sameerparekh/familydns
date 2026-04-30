@@ -1,85 +1,147 @@
 #!/usr/bin/env bash
-# One-time host setup for a fresh Linux deploy target.
+# One-shot bootstrap for a fresh Linux deploy target.
 #
-# Creates the familydns user, /opt/familydns layout, clones the repo, and
-# installs the systemd unit. Idempotent — safe to re-run.
+# Designed to be curl-piped:
 #
-# Usage:  sudo ./bootstrap-host.sh [git-url]
-#         (default: git@github.com:sameerparekh/familydns.git)
+#   curl -fsSL https://raw.githubusercontent.com/sameerparekh/familydns/main/scripts/bootstrap-host.sh | bash
+#
+# Or run from a checkout:  scripts/bootstrap-host.sh
+#
+# Run as your normal login user (NOT root). The script will use `sudo` for the
+# small set of operations that genuinely need root (apt, /usr/local/bin,
+# useradd, /etc/systemd, /etc/sudoers.d, /opt, /var/lib, /var/log, /etc).
+# Everything else (the repo clone, scalafmt install via coursier, builds) runs
+# as the familydns service user, never root.
+#
+# Idempotent: safe to re-run.
 
 set -euo pipefail
 
-REPO_URL="${1:-git@github.com:sameerparekh/familydns.git}"
+REPO_URL="${FAMILYDNS_REPO_URL:-https://github.com/sameerparekh/familydns.git}"
+BRANCH="${FAMILYDNS_BRANCH:-production}"
 PREFIX="${FAMILYDNS_PREFIX:-/opt/familydns}"
-USER_NAME="familydns"
+USER_NAME="${FAMILYDNS_USER:-familydns}"
+MILL_VERSION="${FAMILYDNS_MILL_VERSION:-1.1.5}"
 
-[ "$EUID" -eq 0 ] || { echo "must run as root (sudo)"; exit 1; }
+if [ "$(uname -s)" != "Linux" ]; then
+  echo "bootstrap-host.sh only supports Linux" >&2
+  exit 1
+fi
 
-# ── Build tooling: JDK 21, Node 22, Coursier+Mill+scalafmt ────────────────
-if ! command -v java >/dev/null 2>&1 || ! java -version 2>&1 | grep -qE 'version "(21|22|23|24)'; then
-  if command -v apt-get >/dev/null 2>&1; then
-    apt-get update -qq
-    apt-get install -y -qq openjdk-21-jdk-headless ca-certificates curl git
-  fi
+if [ "$EUID" -eq 0 ]; then
+  echo "Do NOT run this script as root. Run as your login user; sudo will be invoked where needed." >&2
+  exit 1
 fi
-if ! command -v node >/dev/null 2>&1; then
-  if command -v apt-get >/dev/null 2>&1; then
-    curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
-    apt-get install -y -qq nodejs
+
+# Make sure we have sudo and it works (prompt once up-front).
+command -v sudo >/dev/null 2>&1 || { echo "sudo is required" >&2; exit 1; }
+sudo -v
+
+log() { echo "[bootstrap] $*"; }
+
+# ── 1. System packages (root) ─────────────────────────────────────────────
+log "Installing system packages (apt)..."
+if command -v apt-get >/dev/null 2>&1; then
+  sudo apt-get update -qq
+  sudo apt-get install -y -qq \
+    openjdk-21-jdk-headless ca-certificates curl git gnupg sudo
+  if ! command -v node >/dev/null 2>&1 \
+     || ! node --version 2>/dev/null | grep -qE '^v(22|23|24)\.'; then
+    curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+    sudo apt-get install -y -qq nodejs
   fi
+else
+  echo "Only apt-based distros (Debian/Ubuntu) are supported by bootstrap." >&2
+  exit 1
 fi
-MILL_VERSION="1.1.5"
-if [ ! -x /usr/local/bin/mill ] || ! /usr/local/bin/mill --version 2>/dev/null | grep -q "$MILL_VERSION"; then
+
+# ── 2. Mill + coursier (root, into /usr/local/bin) ────────────────────────
+if ! command -v mill >/dev/null 2>&1 \
+   || ! mill --version 2>/dev/null | grep -q "$MILL_VERSION"; then
+  log "Installing mill $MILL_VERSION..."
+  TMP_MILL=$(mktemp)
   curl -fsSL "https://repo1.maven.org/maven2/com/lihaoyi/mill-dist/${MILL_VERSION}/mill-dist-${MILL_VERSION}-mill.sh" \
-    -o /usr/local/bin/mill
-  chmod +x /usr/local/bin/mill
+    -o "$TMP_MILL"
+  chmod +x "$TMP_MILL"
+  sudo mv "$TMP_MILL" /usr/local/bin/mill
 fi
-if [ ! -x /usr/local/bin/cs ]; then
-  ARCH="$(uname -m)"; case "$ARCH" in
-    x86_64) CS_URL="https://github.com/coursier/coursier/releases/latest/download/cs-x86_64-pc-linux.gz" ;;
-    aarch64|arm64) CS_URL="https://github.com/coursier/coursier/releases/latest/download/cs-aarch64-pc-linux.gz" ;;
+
+if ! command -v cs >/dev/null 2>&1; then
+  log "Installing coursier..."
+  ARCH="$(uname -m)"
+  case "$ARCH" in
+    x86_64)
+      # Native launcher exists for x86_64 linux — use it.
+      TMP_CS=$(mktemp)
+      curl -fsSL "https://github.com/coursier/coursier/releases/latest/download/cs-x86_64-pc-linux.gz" \
+        | gunzip > "$TMP_CS"
+      chmod +x "$TMP_CS"
+      sudo mv "$TMP_CS" /usr/local/bin/cs
+      ;;
+    aarch64|arm64)
+      # No native launcher published for aarch64-linux — wrap the jar.
+      sudo curl -fsSL \
+        "https://github.com/coursier/coursier/releases/latest/download/coursier.jar" \
+        -o /usr/local/lib/coursier.jar
+      sudo tee /usr/local/bin/cs >/dev/null <<'CS'
+#!/usr/bin/env bash
+exec java -jar /usr/local/lib/coursier.jar "$@"
+CS
+      sudo chmod +x /usr/local/bin/cs
+      ;;
     *) echo "unsupported arch $ARCH" >&2; exit 1 ;;
   esac
-  curl -fsSL "$CS_URL" | gunzip > /usr/local/bin/cs
-  chmod +x /usr/local/bin/cs
 fi
-/usr/local/bin/cs install --install-dir /usr/local/bin --quiet scalafmt
 
-# ── User & directories ────────────────────────────────────────────────────
+# scalafmt is just a coursier app — install into /usr/local/bin as root so
+# both the deploy user and admins can use it.
+log "Installing scalafmt..."
+sudo /usr/local/bin/cs install --install-dir /usr/local/bin --quiet scalafmt
+
+# ── 3. Service user + filesystem layout (root) ────────────────────────────
 if ! id -u "$USER_NAME" >/dev/null 2>&1; then
-  useradd --system --create-home --home-dir /var/lib/familydns \
-          --shell /usr/sbin/nologin "$USER_NAME"
+  log "Creating system user $USER_NAME..."
+  sudo useradd --system --create-home --home-dir /var/lib/"$USER_NAME" \
+               --shell /bin/bash "$USER_NAME"
 fi
-install -d -o "$USER_NAME" -g "$USER_NAME" "$PREFIX"
-install -d -o "$USER_NAME" -g "$USER_NAME" /var/lib/familydns
-install -d -o "$USER_NAME" -g "$USER_NAME" /var/log/familydns
-install -d -m 0750 -o "$USER_NAME" -g "$USER_NAME" /etc/familydns
 
-# ── Clone or update the repo ──────────────────────────────────────────────
+sudo install -d -o "$USER_NAME" -g "$USER_NAME" "$PREFIX"
+sudo install -d -o "$USER_NAME" -g "$USER_NAME" /var/lib/"$USER_NAME"
+sudo install -d -o "$USER_NAME" -g "$USER_NAME" /var/log/familydns
+sudo install -d -m 0750 -o "$USER_NAME" -g "$USER_NAME" /etc/familydns
+
+# ── 4. Clone or update the repo (as the deploy user) ──────────────────────
 if [ ! -d "$PREFIX/repo/.git" ]; then
-  sudo -u "$USER_NAME" git clone --depth 50 "$REPO_URL" "$PREFIX/repo"
+  log "Cloning $REPO_URL → $PREFIX/repo (branch $BRANCH)..."
+  sudo -u "$USER_NAME" git clone --depth 50 --branch "$BRANCH" \
+       "$REPO_URL" "$PREFIX/repo"
 else
+  log "Updating existing checkout in $PREFIX/repo..."
   sudo -u "$USER_NAME" git -C "$PREFIX/repo" fetch --prune origin
+  sudo -u "$USER_NAME" git -C "$PREFIX/repo" checkout "$BRANCH"
+  sudo -u "$USER_NAME" git -C "$PREFIX/repo" reset --hard "origin/$BRANCH"
 fi
 
-# ── Install systemd unit (symlinked from the repo so updates flow with git)
-ln -sfn "$PREFIX/repo/deploy/familydns-api.service" \
-        /etc/systemd/system/familydns-api.service
+# ── 5. systemd units (symlinked from the repo so updates flow with git) ────
+log "Installing systemd units..."
+sudo install -d /etc/systemd/system
+sudo ln -sfn "$PREFIX/repo/deploy/familydns-api.service" \
+     /etc/systemd/system/familydns-api.service
 
-# ── Optional: install a deploy timer that re-runs scripts/deploy.sh hourly
-cat >/etc/systemd/system/familydns-deploy.service <<EOF
+sudo tee /etc/systemd/system/familydns-deploy.service >/dev/null <<EOF
 [Unit]
-Description=Pull and deploy FamilyDNS from main
+Description=Pull and deploy FamilyDNS from $BRANCH
 After=network-online.target
 
 [Service]
 Type=oneshot
 User=$USER_NAME
+Environment=FAMILYDNS_BRANCH=$BRANCH
 WorkingDirectory=$PREFIX/repo
 ExecStart=$PREFIX/repo/scripts/deploy.sh
 EOF
 
-cat >/etc/systemd/system/familydns-deploy.timer <<EOF
+sudo tee /etc/systemd/system/familydns-deploy.timer >/dev/null <<EOF
 [Unit]
 Description=Run familydns-deploy hourly
 
@@ -92,33 +154,33 @@ Unit=familydns-deploy.service
 WantedBy=timers.target
 EOF
 
-systemctl daemon-reload
+sudo systemctl daemon-reload
 
-# ── Sample config (only if not already present) ───────────────────────────
+# ── 6. Sample config ──────────────────────────────────────────────────────
 if [ ! -f /etc/familydns/application.conf ]; then
-  install -m 0640 -o "$USER_NAME" -g "$USER_NAME" \
+  log "Seeding /etc/familydns/application.conf from example..."
+  sudo install -m 0640 -o "$USER_NAME" -g "$USER_NAME" \
     "$PREFIX/repo/config/application.conf.example" \
     /etc/familydns/application.conf
-  echo "Wrote /etc/familydns/application.conf — edit secrets before starting the service."
 fi
 
-# Allow the deploy user to restart the service without a password
-cat >/etc/sudoers.d/familydns-deploy <<EOF
+# ── 7. Sudoers rule for the deploy user ───────────────────────────────────
+sudo tee /etc/sudoers.d/familydns-deploy >/dev/null <<EOF
 $USER_NAME ALL=(root) NOPASSWD: /bin/systemctl restart familydns-api.service, /usr/bin/install, /bin/mv, /bin/rm, /bin/cp, /usr/bin/tee
 EOF
-chmod 0440 /etc/sudoers.d/familydns-deploy
+sudo chmod 0440 /etc/sudoers.d/familydns-deploy
 
 cat <<MSG
-Bootstrap complete.
+
+[bootstrap] Done.
 
 Next steps:
-  1. Edit /etc/familydns/application.conf and set jwt.secret + db.password
-  2. (Optional) write env overrides in /etc/familydns/api.env
-  3. systemctl enable --now familydns-api.service
-  4. systemctl enable --now familydns-deploy.timer    # auto-pull & redeploy
-  5. Run an initial deploy:  sudo -u $USER_NAME $PREFIX/repo/scripts/deploy.sh
+  1. Edit /etc/familydns/application.conf — set jwt.secret + db.password.
+  2. (Optional) /etc/familydns/api.env for environment overrides.
+  3. sudo systemctl enable --now familydns-api.service
+  4. sudo systemctl enable --now familydns-deploy.timer
+  5. Initial build/deploy:
+       sudo -u $USER_NAME FAMILYDNS_BRANCH=$BRANCH $PREFIX/repo/scripts/deploy.sh
 
-The service unit and deploy script are tracked in the repo
-($PREFIX/repo/deploy/, $PREFIX/repo/scripts/) — to roll out changes,
-merge to main and the timer (or a manual deploy.sh run) will pick them up.
+Tracking branch: $BRANCH (e2e-tested before promotion).
 MSG

@@ -22,7 +22,7 @@
 
 set -euo pipefail
 
-BRANCH="${FAMILYDNS_BRANCH:-main}"
+BRANCH="${FAMILYDNS_BRANCH:-production}"
 PREFIX="${FAMILYDNS_PREFIX:-/opt/familydns}"
 REPO="$PREFIX/repo"
 LOG_TAG="familydns-deploy"

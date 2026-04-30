@@ -85,37 +85,96 @@ and restarts a systemd unit. Every artifact (the unit file, the deploy
 script, the bootstrap script) lives in this repo, so updating any of them
 is a normal PR.
 
-### One-time host bootstrap
+### One-shot host bootstrap (curl-pipe)
 
-On a fresh Linux box (Debian / Ubuntu), as root:
+On a fresh Debian / Ubuntu box, as your **normal login user** (not root):
 
 ```bash
-# Clone just enough to run the bootstrap
-git clone git@github.com:sameerparekh/familydns.git /opt/familydns/repo
-sudo /opt/familydns/repo/scripts/bootstrap-host.sh
+curl -fsSL https://raw.githubusercontent.com/sameerparekh/familydns/main/scripts/bootstrap-host.sh | bash
 ```
 
-`bootstrap-host.sh` is idempotent and:
+The script asks for `sudo` once, then handles everything: installing the
+toolchain, creating the `familydns` system user, cloning the repo (tracking
+the `production` branch — see [Production branch & deploy gate](#production-branch--deploy-gate)),
+installing systemd units, and seeding `/etc/familydns/application.conf`.
+Idempotent — safe to re-run.
 
-1. Installs JDK 21, Node 22, Coursier, Mill 1.1.5, scalafmt
-2. Creates the `familydns` system user and `/opt/familydns` layout
-3. Symlinks `deploy/familydns-api.service` into `/etc/systemd/system`
-   (so updates to the unit flow with `git pull`)
-4. Writes `/etc/systemd/system/familydns-deploy.service` and a `.timer`
-   that runs `scripts/deploy.sh` hourly (also git-tracked logic — the
-   timer just invokes the script from the repo)
-5. Drops a sample `/etc/familydns/application.conf` from
-   `config/application.conf.example`
-6. Adds a sudoers rule letting the `familydns` user restart the API and
-   write into `/opt/familydns/`
+Override defaults via env: `FAMILYDNS_BRANCH`, `FAMILYDNS_REPO_URL`,
+`FAMILYDNS_PREFIX`, `FAMILYDNS_USER`, `FAMILYDNS_MILL_VERSION`.
 
-After bootstrap, edit `/etc/familydns/application.conf` (set
-`jwt.secret` and `db.password`), then:
+What it does:
+
+1. apt-installs JDK 21, Node 22, git, curl
+2. Installs Coursier, Mill, scalafmt into `/usr/local/bin`
+3. Creates the `familydns` system user + `/opt/familydns`, `/var/lib/familydns`,
+   `/var/log/familydns`, `/etc/familydns`
+4. Clones the repo into `/opt/familydns/repo` **as the `familydns` user**
+   (root never owns the checkout)
+5. Symlinks `deploy/familydns-api.service` into `/etc/systemd/system` so
+   unit-file updates flow with `git pull`
+6. Writes `/etc/systemd/system/familydns-deploy.{service,timer}`
+   that re-runs `scripts/deploy.sh` hourly
+7. Seeds `/etc/familydns/application.conf`
+8. Adds a minimal sudoers rule for the deploy user
+
+After bootstrap, edit `/etc/familydns/application.conf` (set `jwt.secret`
+and `db.password`), then:
 
 ```bash
 sudo systemctl enable --now familydns-api.service
 sudo systemctl enable --now familydns-deploy.timer    # auto-pull every hour
 ```
+
+#### Testing the bootstrap script in Docker
+
+We don't want to debug bootstrap on the live box, so the script has a
+container smoke test:
+
+```bash
+docker build -f docker/bootstrap-test.Dockerfile -t familydns-bootstrap-test .
+docker run --rm familydns-bootstrap-test
+```
+
+The container creates a non-root login user, points the bootstrap at the
+local checkout (via `file://` git remote), runs it, and asserts that the
+expected layout (`/opt/familydns/repo`, the systemd units, the sudoers
+file, the `familydns` user, mill/node/java) exists. CI runs this on
+every PR (`.github/workflows/e2e.yml` → `bootstrap-smoke`).
+
+### Staging stack (browser + DNS testing, locally and in CI)
+
+The `docker/` directory builds a self-contained staging environment —
+postgres + the API server with the React bundle baked in:
+
+```bash
+docker compose -f docker/docker-compose.yml up --build
+# → http://localhost:8080  (admin / changeme)
+
+# Live API/DB e2e:
+scripts/e2e-tests.sh
+```
+
+Use this to drive the UI in your browser and to run live tests against
+the API exactly as CI runs them. The DNS server module does not yet have
+a runnable `Main`, so DNS-over-the-wire e2e from the staging container
+is a follow-up — `scripts/e2e-tests.sh` covers the API HTTP surface
+today.
+
+### Production branch & deploy gate
+
+Branches:
+
+- **`main`** — what PRs merge into. CI runs unit tests + the staging stack
+  + `scripts/e2e-tests.sh` (`.github/workflows/e2e.yml`).
+- **`production`** — only updated by CI, only when both the bootstrap
+  smoke test and the live e2e suite pass against the commit. The job
+  fast-forwards `production` to `main`; if `main` ever diverges from
+  `production` (e.g. a hotfix landed on `production` directly), CI
+  refuses to push and the divergence has to be resolved by hand.
+
+The host's deploy timer and `scripts/deploy.sh` track `production` (via
+`FAMILYDNS_BRANCH=production`, the new default), so the live box only
+ever runs commits that have passed the e2e gate.
 
 ### Manual deploy
 
@@ -130,7 +189,7 @@ Environment knobs (set on the command line or in
 
 | Var                   | Default | Effect                                      |
 | --------------------- | ------- | ------------------------------------------- |
-| `FAMILYDNS_BRANCH`    | `main`  | Branch to track                             |
+| `FAMILYDNS_BRANCH`    | `production` | Branch to track (e2e-gated)            |
 | `FAMILYDNS_PREFIX`    | `/opt/familydns` | Install root                       |
 | `FAMILYDNS_NO_WEB`    | `0`     | Skip frontend build                         |
 | `FAMILYDNS_NO_RESTART`| `0`     | Build but don't restart the service         |
@@ -146,6 +205,9 @@ rather than copying them. That way:
   PRs against `main` like any other code
 - a deploy timer can re-run `scripts/deploy.sh` from the freshly-pulled
   repo — fixes to the deploy logic apply on the next tick
+- the script tracks the `production` branch by default, so only commits
+  that passed the e2e gate (see [Production branch & deploy gate](#production-branch--deploy-gate))
+  get rolled out
 
 If you'd rather not symlink, copy the unit and re-copy after each pull —
 but you lose the auto-update property.

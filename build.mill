@@ -1,5 +1,6 @@
 import mill._
 import mill.scalalib._
+import mill.javalib.Assembly
 
 val scala3Version = "3.3.3"
 
@@ -78,6 +79,13 @@ object api extends CommonModule {
     mvn"org.postgresql:postgresql:$postgresVersion",
     mvn"ch.qos.logback:logback-classic:$logbackVersion",
     mvn"dev.zio::zio-interop-cats:23.1.0.3",
+  )
+  // Concatenate ServiceLoader registrations across all jars. Without this,
+  // flyway-database-postgresql's plugin entries get dropped during assembly
+  // and Flyway can't recognise jdbc:postgresql:// URLs at runtime.
+  override def assemblyRules = super.assemblyRules ++ Seq(
+    Assembly.Rule.Append("META-INF/services/org.flywaydb.core.extensibility.Plugin", "\n"),
+    Assembly.Rule.Append("META-INF/services/java.sql.Driver", "\n"),
   )
   override def resources: T[Seq[PathRef]] = Task {
     super.resources() ++ Seq(PathRef(os.pwd / "api" / "src" / "db" / "migrations"))

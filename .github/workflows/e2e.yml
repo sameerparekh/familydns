@@ -1,0 +1,73 @@
+name: E2E (staging stack) + promote production
+
+# Brings up the same docker-compose stack used locally, runs scripts/e2e-tests.sh
+# against it, and — on green builds of `main` — fast-forwards the `production`
+# branch. Production deploys (scripts/deploy.sh) track `production`, so only
+# e2e-passing commits ever reach the live host.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Only one promotion can run at a time — avoids racing fast-forwards.
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  bootstrap-smoke:
+    name: bootstrap-host.sh smoke (Ubuntu container)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build + run bootstrap test image
+        run: |
+          docker build -f docker/bootstrap-test.Dockerfile -t familydns-bootstrap-test .
+          docker run --rm familydns-bootstrap-test
+
+  e2e:
+    name: Live e2e against staging stack
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build + start staging stack
+        run: |
+          docker compose -f docker/docker-compose.yml up -d --build --wait
+
+      - name: Run e2e tests
+        run: scripts/e2e-tests.sh
+
+      - name: Dump api logs on failure
+        if: failure()
+        run: |
+          docker compose -f docker/docker-compose.yml logs api || true
+          docker compose -f docker/docker-compose.yml logs postgres || true
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f docker/docker-compose.yml down -v
+
+  promote-production:
+    name: Fast-forward production branch
+    needs: [bootstrap-smoke, e2e]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Fast-forward production → main
+        run: |
+          git config user.name  "familydns-ci"
+          git config user.email "ci@familydns.local"
+          git fetch origin production:production || git branch production
+          # Only fast-forward; refuse if main diverged from production.
+          git checkout production
+          git merge --ff-only origin/main
+          git push origin production
