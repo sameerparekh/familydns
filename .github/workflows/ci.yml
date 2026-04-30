@@ -40,15 +40,19 @@ jobs:
             mill-${{ env.MILL_VERSION }}-
             mill-
 
-      - name: Install Coursier, Mill, scalafmt
+      - name: Install Mill (official launcher) and scalafmt
         run: |
+          # Mill 1.x ships an official Bash launcher on Maven Central
+          curl -fsSL "https://repo1.maven.org/maven2/com/lihaoyi/mill-dist/${MILL_VERSION}/mill-dist-${MILL_VERSION}-mill.sh" \
+            -o /tmp/mill
+          chmod +x /tmp/mill
+          sudo mv /tmp/mill /usr/local/bin/mill
+          mill --version
+          # scalafmt via coursier (Coursier's app channel handles this fine)
           curl -fsSL https://github.com/coursier/coursier/releases/latest/download/cs-x86_64-pc-linux.gz \
             | gunzip > /tmp/cs
           chmod +x /tmp/cs
-          sudo mv /tmp/cs /usr/local/bin/cs
-          cs install --install-dir /usr/local/bin --quiet "mill:${MILL_VERSION}" scalafmt
-          mill --version
-          scalafmt --version
+          /tmp/cs install --install-dir /usr/local/bin --quiet scalafmt
 
       - name: scalafmt --check
         run: scalafmt --check --non-interactive

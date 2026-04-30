@@ -28,6 +28,12 @@ if ! command -v node >/dev/null 2>&1; then
     apt-get install -y -qq nodejs
   fi
 fi
+MILL_VERSION="1.1.5"
+if [ ! -x /usr/local/bin/mill ] || ! /usr/local/bin/mill --version 2>/dev/null | grep -q "$MILL_VERSION"; then
+  curl -fsSL "https://repo1.maven.org/maven2/com/lihaoyi/mill-dist/${MILL_VERSION}/mill-dist-${MILL_VERSION}-mill.sh" \
+    -o /usr/local/bin/mill
+  chmod +x /usr/local/bin/mill
+fi
 if [ ! -x /usr/local/bin/cs ]; then
   ARCH="$(uname -m)"; case "$ARCH" in
     x86_64) CS_URL="https://github.com/coursier/coursier/releases/latest/download/cs-x86_64-pc-linux.gz" ;;
@@ -37,7 +43,7 @@ if [ ! -x /usr/local/bin/cs ]; then
   curl -fsSL "$CS_URL" | gunzip > /usr/local/bin/cs
   chmod +x /usr/local/bin/cs
 fi
-/usr/local/bin/cs install --install-dir /usr/local/bin --quiet mill:1.1.5 scalafmt
+/usr/local/bin/cs install --install-dir /usr/local/bin --quiet scalafmt
 
 # ── User & directories ────────────────────────────────────────────────────
 if ! id -u "$USER_NAME" >/dev/null 2>&1; then
