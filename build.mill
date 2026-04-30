@@ -128,7 +128,7 @@ object dns extends CommonModule {
 
 // ── Traffic ────────────────────────────────────────────────────────────────
 object traffic extends CommonModule {
-  def moduleDeps = Seq(shared)
+  def moduleDeps = Seq(shared, api)
   def mvnDeps = Seq(
     mvn"dev.zio::zio:$zioVersion",
     mvn"dev.zio::zio-streams:$zioVersion",
@@ -144,6 +144,12 @@ object traffic extends CommonModule {
     mvn"org.tpolecat::doobie-hikari:$doobieVersion",
     mvn"org.postgresql:postgresql:$postgresVersion",
     mvn"ch.qos.logback:logback-classic:$logbackVersion",
+  )
+  // Mirrors api.assemblyRules — api is on the classpath and brings flyway + jdbc
+  // ServiceLoader entries that must be concatenated rather than overwritten.
+  override def assemblyRules = super.assemblyRules ++ Seq(
+    Assembly.Rule.Append("META-INF/services/org.flywaydb.core.extensibility.Plugin", "\n"),
+    Assembly.Rule.Append("META-INF/services/java.sql.Driver", "\n"),
   )
   object test extends ScalaTests with FamilyDnsTestModule {
     def moduleDeps = super.moduleDeps ++ Seq(traffic)
