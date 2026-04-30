@@ -1,0 +1,34 @@
+[Unit]
+Description=FamilyDNS API server
+Documentation=https://github.com/sameerparekh/familydns
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=familydns
+Group=familydns
+WorkingDirectory=/opt/familydns
+EnvironmentFile=-/etc/familydns/api.env
+ExecStart=/usr/bin/java \
+  -Xms256m -Xmx512m \
+  -Dconfig.file=/etc/familydns/application.conf \
+  -jar /opt/familydns/api.jar
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=familydns-api
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log/familydns /var/lib/familydns
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+[Install]
+WantedBy=multi-user.target
