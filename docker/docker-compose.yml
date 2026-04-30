@@ -1,0 +1,51 @@
+# Local + CI staging stack.
+#
+#   docker compose -f docker/docker-compose.yml up --build
+#
+# Then:
+#   - browse to http://localhost:8080
+#   - run e2e tests:  scripts/e2e-tests.sh
+#
+# Used identically in GitHub Actions (.github/workflows/e2e.yml).
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: familydns
+      POSTGRES_PASSWORD: familydns
+      POSTGRES_DB: familydns
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U familydns -d familydns"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    ports:
+      - "127.0.0.1:5433:5432"
+
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      FAMILYDNS_DB_HOST: postgres
+      FAMILYDNS_DB_PORT: "5432"
+      FAMILYDNS_DB_NAME: familydns
+      FAMILYDNS_DB_USER: familydns
+      FAMILYDNS_DB_PASSWORD: familydns
+      FAMILYDNS_HTTP_PORT: "8080"
+      FAMILYDNS_JWT_SECRET: "staging-jwt-secret-do-not-use-in-prod-32ch"
+      FAMILYDNS_DNS_REFRESH: "5"
+    ports:
+      - "127.0.0.1:8080:8080"
+    healthcheck:
+      # Login endpoint with bad creds → 401, which proves the API + DB are alive.
+      # `curl -f` would treat 401 as failure, so we check the body shape instead.
+      test: ["CMD-SHELL", "curl -s -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' -d '{}' http://localhost:8080/api/auth/login | grep -qE '^(400|401)$'"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+      start_period: 20s
