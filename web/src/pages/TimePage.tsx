@@ -132,11 +132,11 @@ function DeviceTimeCard({
   isAdmin: boolean
   onGrant: () => void
 }) {
-  const hasLimit = status.dailyLimitMins !== null
+  const hasLimit = status.dailyLimitMins != null
   const pct = hasLimit && status.dailyLimitMins
     ? Math.min(100, Math.round((status.usedMins / (status.dailyLimitMins + status.extensionMins)) * 100))
     : 0
-  const overLimit = hasLimit && status.remainingMins !== null && status.remainingMins <= 0
+  const overLimit = hasLimit && status.remainingMins != null && status.remainingMins <= 0
 
   return (
     <div className={`bg-gray-900 rounded-2xl border p-5 space-y-4 ${overLimit ? 'border-red-500/40' : 'border-gray-800'}`}>
@@ -162,7 +162,7 @@ function DeviceTimeCard({
             <div className="flex justify-between text-xs text-gray-500 mb-1.5">
               <span>{status.usedMins}m used</span>
               <span>
-                {status.remainingMins !== null && status.remainingMins > 0
+                {status.remainingMins != null && status.remainingMins > 0
                   ? `${status.remainingMins}m left`
                   : <span className="text-red-400">Limit reached</span>
                 }
