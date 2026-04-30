@@ -200,4 +200,4 @@ Both can be bypassed in an emergency with `--no-verify`.
 
 ## License
 
-See [LICENSE](LICENSE) (TBD).
+Apache License 2.0 — see [LICENSE](LICENSE).
