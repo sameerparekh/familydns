@@ -40,20 +40,15 @@ jobs:
             mill-${{ env.MILL_VERSION }}-
             mill-
 
-      - name: Install Mill
-        run: |
-          curl -fsSL "https://github.com/com-lihaoyi/mill/releases/download/${MILL_VERSION}/mill-${MILL_VERSION}-assembly" \
-            -o /tmp/mill
-          chmod +x /tmp/mill
-          sudo mv /tmp/mill /usr/local/bin/mill
-          mill --version
-
-      - name: Install scalafmt
+      - name: Install Coursier, Mill, scalafmt
         run: |
           curl -fsSL https://github.com/coursier/coursier/releases/latest/download/cs-x86_64-pc-linux.gz \
             | gunzip > /tmp/cs
           chmod +x /tmp/cs
-          /tmp/cs install scalafmt --dir /usr/local/bin
+          sudo mv /tmp/cs /usr/local/bin/cs
+          cs install --install-dir /usr/local/bin --quiet "mill:${MILL_VERSION}" scalafmt
+          mill --version
+          scalafmt --version
 
       - name: scalafmt --check
         run: scalafmt --check --non-interactive
