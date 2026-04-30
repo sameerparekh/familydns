@@ -9,6 +9,10 @@ on:
 
 env:
   MILL_VERSION: "1.1.5"
+  # Opt into Node.js 24 now (forced default June 2026 anyway). Silences the
+  # Node 20 deprecation warnings emitted by actions/checkout@v4, setup-java@v4,
+  # setup-node@v4, cache@v4, codeql-action@v4 etc.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
   # ── Scala: format, compile, test ─────────────────────────────────────────
@@ -105,6 +109,12 @@ jobs:
   security:
     name: Security Scan
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Required for github/codeql-action/upload-sarif to push results into
+      # the Code Scanning tab. Without this the upload step 403s with
+      # "Resource not accessible by integration".
+      security-events: write
     steps:
       - uses: actions/checkout@v4
 
@@ -118,7 +128,7 @@ jobs:
         continue-on-error: true
 
       - name: Upload Trivy SARIF
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: "trivy-results.sarif"
         if: always()
