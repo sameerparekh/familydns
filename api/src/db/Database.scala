@@ -19,7 +19,7 @@ object Database:
     ds.setConnectionTimeout(30000)
     ds.setIdleTimeout(600000)
     ds.setMaxLifetime(1800000)
-    Transactor.fromDataSource[Task](ds, zio.interop.catz.asyncInstance)
+    Transactor.fromDataSource[Task](ds, scala.concurrent.ExecutionContext.global)
 
   def runMigrations(cfg: DbConfig): Task[Unit] =
     ZIO.attempt:

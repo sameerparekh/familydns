@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# Fast pre-commit checks (<5s): formatting + lint of *staged* files only.
+# To bypass in an emergency: git commit --no-verify
+set -euo pipefail
+
+start=$(date +%s)
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+
+# Collect staged files by type (ACMR = added/copied/modified/renamed)
+SCALA_FILES="$(git diff --cached --name-only --diff-filter=ACMR | grep -E '\.scala$' || true)"
+WEB_TS_FILES="$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^web/.*\.(ts|tsx)$' || true)"
+
+fail=0
+
+# ── Scala: scalafmt check on staged files only ────────────────────────────
+if [ -n "$SCALA_FILES" ]; then
+  if ! command -v scalafmt >/dev/null 2>&1; then
+    echo "pre-commit: scalafmt not on PATH — skipping Scala format check" >&2
+  else
+    n=$(echo "$SCALA_FILES" | wc -l | tr -d ' ')
+    echo "pre-commit: scalafmt --check ($n files)"
+    # shellcheck disable=SC2086
+    if ! echo "$SCALA_FILES" | xargs scalafmt --check --non-interactive; then
+      echo "pre-commit: scalafmt failed. Run: scalafmt <files>" >&2
+      fail=1
+    fi
+  fi
+fi
+
+# ── Web: eslint on staged TS/TSX only ─────────────────────────────────────
+if [ -n "$WEB_TS_FILES" ]; then
+  if [ -d web/node_modules ]; then
+    n=$(echo "$WEB_TS_FILES" | wc -l | tr -d ' ')
+    echo "pre-commit: eslint ($n files)"
+    # Strip leading "web/" — eslint runs from web/
+    REL="$(echo "$WEB_TS_FILES" | sed 's|^web/||')"
+    # shellcheck disable=SC2086
+    if ! (cd web && echo "$REL" | xargs npx --no-install eslint --max-warnings 0); then
+      echo "pre-commit: eslint failed" >&2
+      fail=1
+    fi
+  else
+    echo "pre-commit: web/node_modules missing — skipping eslint" >&2
+  fi
+fi
+
+end=$(date +%s)
+echo "pre-commit: $((end - start))s"
+exit $fail

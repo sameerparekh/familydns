@@ -4,38 +4,37 @@ import familydns.shared.*
 import org.pcap4j.core.*
 import org.pcap4j.packet.*
 import zio.*
-import zio.logging.*
 
 import java.net.InetAddress
 import java.time.LocalDate
 import scala.collection.mutable
 
 case class TrafficConfig(
-  interface:          String,
-  sessionTimeoutSecs: Int,
-  flushIntervalSecs:  Int,
-  location:           String,
+    interface: String,
+    sessionTimeoutSecs: Int,
+    flushIntervalSecs: Int,
+    location: String,
 )
 
 case class Session(
-  mac:        String,
-  domain:     String,
-  startedAt:  Long,
-  lastSeenAt: Long,
-  bytes:      Long,
+    mac: String,
+    domain: String,
+    startedAt: Long,
+    lastSeenAt: Long,
+    bytes: Long,
 )
 
 /**
  * Tracks active traffic sessions.
  *
- * Uses Scala mutable.HashMap intentionally — this runs in a tight inner loop
- * handling every network packet. ZIO Ref overhead per-packet would be significant.
- * All mutation is single-threaded (called from one fiber via captureLoop).
- * The sweepExpired / drainPending methods are also called from a single fiber.
+ * Uses Scala mutable.HashMap intentionally — this runs in a tight inner loop handling every network
+ * packet. ZIO Ref overhead per-packet would be significant. All mutation is single-threaded (called
+ * from one fiber via captureLoop). The sweepExpired / drainPending methods are also called from a
+ * single fiber.
  */
 class SessionTracker(
-  config:      TrafficConfig,
-  dnsCacheRef: Ref[DnsCache],
+    config: TrafficConfig,
+    @scala.annotation.unused dnsCacheRef: Ref[DnsCache],
 ):
   // mutable allowed: tight inner loop, single-fiber access
   private val sessions = mutable.HashMap[(String, String), Session]()
@@ -45,13 +44,13 @@ class SessionTracker(
     val domain = reverseDnsOrIp(dstIp)
     val apex   = apexDomain(domain)
     val key    = (srcMac, apex)
-    val now    = System.currentTimeMillis()
+    val now    = java.lang.System.currentTimeMillis()
     sessions.get(key) match
       case Some(sess) => sessions(key) = sess.copy(lastSeenAt = now, bytes = sess.bytes + bytes)
       case None       => sessions(key) = Session(srcMac, apex, now, now, bytes)
 
   def sweepExpired(): Unit =
-    val now     = System.currentTimeMillis()
+    val now     = java.lang.System.currentTimeMillis()
     val timeout = config.sessionTimeoutSecs * 1000L
     val today   = LocalDate.now().toString
     sessions.filterInPlace { case (_, sess) =>
@@ -72,11 +71,9 @@ class SessionTracker(
 
   // Test helpers — only used in tests
   private[traffic] def activeSessions: Map[(String, String), Session] = sessions.toMap
-  private[traffic] def forceExpireAll(): Unit =
-    val old = System.currentTimeMillis() - (config.sessionTimeoutSecs + 1) * 1000L
-    sessions.keys.foreach { k =>
-      sessions(k) = sessions(k).copy(lastSeenAt = old)
-    }
+  private[traffic] def forceExpireAll(): Unit                         =
+    val old = java.lang.System.currentTimeMillis() - (config.sessionTimeoutSecs + 1) * 1000L
+    sessions.keys.foreach(k => sessions(k) = sessions(k).copy(lastSeenAt = old))
 
   private def apexDomain(host: String): String =
     val parts = host.split('.')
@@ -91,10 +88,10 @@ trait TrafficMonitor:
   def getSnapshot: UIO[TimeUsageSnapshot]
 
 class TrafficMonitorLive(
-  config:      TrafficConfig,
-  tracker:     SessionTracker,
-  usageRef:    Ref[TimeUsageSnapshot],
-  dbFlush:     (String, String, LocalDate, Int) => Task[Unit],
+    config: TrafficConfig,
+    tracker: SessionTracker,
+    usageRef: Ref[TimeUsageSnapshot],
+    dbFlush: (String, String, LocalDate, Int) => Task[Unit],
 ) extends TrafficMonitor:
 
   def start: Task[Unit] =
@@ -111,7 +108,7 @@ class TrafficMonitorLive(
 
   private def handlePacket(pkt: Packet): Unit =
     try
-      val eth = pkt.get(classOf[EthernetPacket])
+      val eth    = pkt.get(classOf[EthernetPacket])
       if eth == null then return
       val srcMac = eth.getHeader.getSrcAddr.toString.toLowerCase
       val ip4    = pkt.get(classOf[IpV4Packet])

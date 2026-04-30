@@ -7,6 +7,7 @@ import familydns.shared.Clock
 import zio.*
 import zio.http.*
 import zio.logging.*
+import zio.logging.backend.SLF4J
 
 object Main extends ZIOAppDefault:
 
@@ -14,30 +15,28 @@ object Main extends ZIOAppDefault:
     Runtime.removeDefaultLoggers >>> SLF4J.slf4j
 
   def run =
-    for
-      cfg <- ZIO.service[AppConfig]
-      _   <- ZIO.logInfo(s"FamilyDNS API starting on ${cfg.http.host}:${cfg.http.port}")
-      _   <- Database.runMigrations(cfg.db)
-      _   <- ZIO.logInfo("Database migrations complete")
-      _   <- Server
-               .serve(allRoutes)
-               .provide(
-                 Server.defaultWithPort(cfg.http.port),
-                 serverEnv,
-               )
-    yield ()
+    (for
+      cfg    <- ZIO.service[AppConfig]
+      _      <- ZIO.logInfo(s"FamilyDNS API starting on ${cfg.http.host}:${cfg.http.port}")
+      _      <- Database.runMigrations(cfg.db)
+      _      <- ZIO.logInfo("Database migrations complete")
+      routes <- allRoutes
+      _      <- Server
+        .serve(routes)
+        .provide(Server.defaultWithPort(cfg.http.port))
+    yield ()).provide(serverEnv)
 
   private val serverEnv =
     AppConfig.layer >+>
-    ZLayer.fromZIO(ZIO.serviceWith[AppConfig](_.db)) >+>
-    ZLayer.fromZIO(ZIO.serviceWith[AppConfig](c => Database.makeTransactor(c.db))) >+>
-    Repos.all >+>
-    ZLayer.fromZIO(ZIO.serviceWith[AppConfig](_.jwt)) >+>
-    AuthService.layer >+>
-    Clock.live
+      ZLayer.fromZIO(ZIO.serviceWith[AppConfig](_.db)) >+>
+      ZLayer.fromZIO(ZIO.serviceWith[AppConfig](c => Database.makeTransactor(c.db))) >+>
+      Repos.all >+>
+      ZLayer.fromZIO(ZIO.serviceWith[AppConfig](_.jwt)) >+>
+      AuthService.layer >+>
+      Clock.live
 
   private def allRoutes =
-    (for
+    for
       auth        <- ZIO.service[AuthService]
       userRepo    <- ZIO.service[UserRepo]
       profileRepo <- ZIO.service[ProfileRepo]
@@ -49,11 +48,9 @@ object Main extends ZIOAppDefault:
       usageRepo   <- ZIO.service[TimeUsageRepo]
       extRepo     <- ZIO.service[TimeExtensionRepo]
       logRepo     <- ZIO.service[QueryLogRepo]
-    yield
-      AuthRoutes.routes(auth, userRepo) ++
+    yield AuthRoutes.routes(auth, userRepo) ++
       ProfileRoutes.routes(auth, profileRepo, schedRepo, tlRepo, stlRepo) ++
       DeviceRoutes.routes(auth, deviceRepo) ++
       TimeRoutes.routes(auth, deviceRepo, tlRepo, stlRepo, usageRepo, extRepo, profileRepo) ++
       LogRoutes.routes(auth, logRepo) ++
       BlocklistRoutes.routes(auth, blRepo)
-    ).toRoutes

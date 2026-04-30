@@ -14,21 +14,21 @@ import java.time.Instant
 // ── JWT Claims ─────────────────────────────────────────────────────────────
 
 case class JwtClaims(
-  sub:      String,   // username
-  role:     String,   // admin | readonly
-  iat:      Long,
-  exp:      Long,
+    sub: String,  // username
+    role: String, // admin | readonly
+    iat: Long,
+    exp: Long,
 ) derives JsonCodec
 
 // ── Auth errors ────────────────────────────────────────────────────────────
 
 sealed trait AuthError
 object AuthError:
-  case object InvalidCredentials extends AuthError
-  case object TokenExpired        extends AuthError
-  case object InvalidToken        extends AuthError
-  case object Forbidden           extends AuthError
-  case class  Unexpected(msg: String) extends AuthError
+  case object InvalidCredentials     extends AuthError
+  case object TokenExpired           extends AuthError
+  case object InvalidToken           extends AuthError
+  case object Forbidden              extends AuthError
+  case class Unexpected(msg: String) extends AuthError
 
 // ── Auth service ───────────────────────────────────────────────────────────
 
@@ -40,39 +40,51 @@ trait AuthService:
   def hashPassword(password: String): UIO[String]
 
 class AuthServiceLive(
-  userRepo:  UserRepo,
-  jwtConfig: JwtConfig,
+    userRepo: UserRepo,
+    jwtConfig: JwtConfig,
 ) extends AuthService:
 
   private val algo: JwtHmacAlgorithm = JwtAlgorithm.HS256
-  private val secret = jwtConfig.secret
+  private val secret                 = jwtConfig.secret
 
   def login(username: String, password: String): IO[AuthError, LoginResponse] =
     for
-      user  <- userRepo.findByUsername(username)
-                 .mapError(e => AuthError.Unexpected(e.getMessage))
-                 .flatMap(ZIO.fromOption(_).mapError(_ => AuthError.InvalidCredentials))
+      user  <- userRepo
+        .findByUsername(username)
+        .mapError(e => AuthError.Unexpected(e.getMessage))
+        .flatMap(ZIO.fromOption(_).mapError(_ => AuthError.InvalidCredentials))
       valid <- ZIO.succeed(
-                 BCrypt.verifyer().verify(password.toCharArray, user.passwordHash).verified
-               )
+        BCrypt.verifyer().verify(password.toCharArray, user.passwordHash).verified,
+      )
       _     <- ZIO.fail(AuthError.InvalidCredentials).when(!valid)
       now   = Instant.now().getEpochSecond
-      claims = JwtClaims(
-                 sub  = user.username,
-                 role = user.role,
-                 iat  = now,
-                 exp  = now + jwtConfig.expiryHours * 3600L,
-               )
-      token <- ZIO.attempt(JwtZIOJson.encode(claims.toJsonAST.toOption.get, secret, algo))
-                 .mapError(e => AuthError.Unexpected(e.getMessage))
+      claim = JwtClaim(
+        content = s"""{"role":"${user.role}"}""",
+        subject = Some(user.username),
+        issuedAt = Some(now),
+        expiration = Some(now + jwtConfig.expiryHours * 3600L),
+      )
+      token <- ZIO
+        .attempt(JwtZIOJson.encode(claim, secret, algo))
+        .mapError(e => AuthError.Unexpected(e.getMessage))
     yield LoginResponse(token, user.role, user.username)
 
   def verify(token: String): IO[AuthError, JwtClaims] =
-    ZIO.fromTry(JwtZIOJson.decode(token, secret, Seq(algo)))
+    ZIO
+      .fromTry(JwtZIOJson.decode(token, secret, Seq(algo)))
       .mapError(_ => AuthError.InvalidToken)
-      .flatMap { json =>
-        ZIO.fromEither(json.as[JwtClaims])
+      .flatMap { claim =>
+        ZIO
+          .fromEither(claim.content.fromJson[Map[String, String]])
           .mapError(_ => AuthError.InvalidToken)
+          .map { m =>
+            JwtClaims(
+              sub = claim.subject.getOrElse(""),
+              role = m.getOrElse("role", ""),
+              iat = claim.issuedAt.getOrElse(0L),
+              exp = claim.expiration.getOrElse(0L),
+            )
+          }
       }
       .flatMap { claims =>
         val now = Instant.now().getEpochSecond
@@ -87,14 +99,18 @@ class AuthServiceLive(
 
   def changePassword(username: String, current: String, next: String): IO[AuthError, Unit] =
     for
-      user  <- userRepo.findByUsername(username)
-                 .mapError(e => AuthError.Unexpected(e.getMessage))
-                 .flatMap(ZIO.fromOption(_).mapError(_ => AuthError.InvalidCredentials))
-      valid <- ZIO.succeed(BCrypt.verifyer().verify(current.toCharArray, user.passwordHash).verified)
+      user  <- userRepo
+        .findByUsername(username)
+        .mapError(e => AuthError.Unexpected(e.getMessage))
+        .flatMap(ZIO.fromOption(_).mapError(_ => AuthError.InvalidCredentials))
+      valid <- ZIO.succeed(
+        BCrypt.verifyer().verify(current.toCharArray, user.passwordHash).verified,
+      )
       _     <- ZIO.fail(AuthError.InvalidCredentials).when(!valid)
       hash  <- hashPassword(next)
-      _     <- userRepo.updatePassword(user.id, hash)
-                 .mapError(e => AuthError.Unexpected(e.getMessage))
+      _     <- userRepo
+        .updatePassword(user.id, hash)
+        .mapError(e => AuthError.Unexpected(e.getMessage))
     yield ()
 
   def hashPassword(password: String): UIO[String] =
