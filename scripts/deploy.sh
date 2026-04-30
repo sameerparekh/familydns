@@ -45,14 +45,16 @@ git reset --hard --quiet "origin/$BRANCH"
 REV="$(git rev-parse --short HEAD)"
 log "Now at $REV"
 
-# ── Build API assembly ────────────────────────────────────────────────────
-log "Building API + traffic assemblies (mill api.assembly traffic.assembly)..."
+# ── Build API + DNS + traffic assemblies ─────────────────────────────────
+log "Building assemblies (mill api.assembly dns.assembly traffic.assembly)..."
 command -v mill >/dev/null 2>&1 || fail "mill not on PATH — run scripts/bootstrap-host.sh"
-mill api.assembly traffic.assembly >/tmp/${LOG_TAG}-mill.log 2>&1 \
-  || { tail -50 /tmp/${LOG_TAG}-mill.log; fail "mill assembly failed"; }
+mill api.assembly dns.assembly traffic.assembly >/tmp/${LOG_TAG}-mill.log 2>&1 \
+  || { tail -50 /tmp/${LOG_TAG}-mill.log; fail "mill assembly build failed"; }
 JAR_SRC="$(ls -t out/api/assembly.dest/out.jar 2>/dev/null | head -1)"
-[ -f "$JAR_SRC" ] || fail "assembly jar not found at out/api/assembly.dest/out.jar"
+DNS_JAR_SRC="$(ls -t out/dns/assembly.dest/out.jar 2>/dev/null | head -1)"
 TRAFFIC_JAR_SRC="$(ls -t out/traffic/assembly.dest/out.jar 2>/dev/null | head -1)"
+[ -f "$JAR_SRC" ] || fail "assembly jar not found at out/api/assembly.dest/out.jar"
+[ -f "$DNS_JAR_SRC" ] || fail "assembly jar not found at out/dns/assembly.dest/out.jar"
 [ -f "$TRAFFIC_JAR_SRC" ] || fail "assembly jar not found at out/traffic/assembly.dest/out.jar"
 
 # ── Build frontend ────────────────────────────────────────────────────────
@@ -67,6 +69,8 @@ log "Swapping artifacts into $PREFIX..."
 sudo install -d -o familydns -g familydns "$PREFIX"
 sudo install -m 0644 -o familydns -g familydns "$JAR_SRC" "$PREFIX/api.jar.new"
 sudo mv -f "$PREFIX/api.jar.new" "$PREFIX/api.jar"
+sudo install -m 0644 -o familydns -g familydns "$DNS_JAR_SRC" "$PREFIX/dns.jar.new"
+sudo mv -f "$PREFIX/dns.jar.new" "$PREFIX/dns.jar"
 sudo install -m 0644 -o familydns -g familydns "$TRAFFIC_JAR_SRC" "$PREFIX/traffic.jar.new"
 sudo mv -f "$PREFIX/traffic.jar.new" "$PREFIX/traffic.jar"
 
@@ -88,7 +92,18 @@ if [ "${FAMILYDNS_NO_RESTART:-0}" != "1" ]; then
   sudo systemctl restart familydns-api.service
   sleep 2
   systemctl is-active --quiet familydns-api.service \
-    || { sudo journalctl -u familydns-api -n 80 --no-pager; fail "service did not come up"; }
+    || { sudo journalctl -u familydns-api -n 80 --no-pager; fail "api did not come up"; }
+
+  # familydns-dns.service may not be installed on every host (some deploys run
+  # only the API). Restart it only if the unit is present.
+  if systemctl list-unit-files familydns-dns.service >/dev/null 2>&1 \
+     && [ -n "$(systemctl list-unit-files familydns-dns.service --no-legend 2>/dev/null)" ]; then
+    log "Restarting familydns-dns.service..."
+    sudo systemctl restart familydns-dns.service
+    sleep 2
+    systemctl is-active --quiet familydns-dns.service \
+      || { sudo journalctl -u familydns-dns -n 80 --no-pager; fail "dns did not come up"; }
+  fi
 
   # Traffic monitor restart is best-effort: the service is optional (admin must
   # enable it explicitly after configuring the right network interface), so a

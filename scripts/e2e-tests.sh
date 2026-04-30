@@ -74,10 +74,30 @@ step "Blocklists endpoint"
 curl -fsS "${AUTH[@]}" "$BASE/api/blocklists" >/dev/null
 pass "blocklists OK"
 
-# DNS / traffic e2e is currently a TODO: the dns and traffic modules don't yet
-# have runnable Mains, so the staging container only runs the API. Once they
-# do, extend this script with a `dig @127.0.0.1 -p 5353 …` block and a pcap
-# probe.
+step "DNS server responds on UDP :5353"
+DNS_HOST="${E2E_DNS_HOST:-127.0.0.1}"
+DNS_PORT="${E2E_DNS_PORT:-5353}"
+if ! command -v dig >/dev/null 2>&1; then
+  fail "dig not installed — install dnsutils/bind-tools"
+fi
+# Wait for DNS server to bind (may start a moment after the api).
+for i in $(seq 1 30); do
+  if dig +tries=1 +time=2 @"$DNS_HOST" -p "$DNS_PORT" example.com >/dev/null 2>&1; then
+    pass "dns server reachable on $DNS_HOST:$DNS_PORT"
+    break
+  fi
+  if [ "$i" = 30 ]; then fail "dns server never came up on $DNS_HOST:$DNS_PORT"; fi
+  sleep 1
+done
+
+# Unknown client (no profile/device row) should still get an answer — it falls
+# through to the default Adults profile and forwards upstream. We just need a
+# well-formed response (status NOERROR or SERVFAIL is fine — the point is the
+# server is parsing queries and writing replies).
+DIG_OUT=$(dig +tries=1 +time=3 @"$DNS_HOST" -p "$DNS_PORT" example.com || true)
+echo "$DIG_OUT" | grep -qE 'status: (NOERROR|NXDOMAIN|SERVFAIL|REFUSED)' \
+  || fail "dns server did not return a parseable response: $DIG_OUT"
+pass "dns server answered example.com"
 
 echo
 echo "All e2e checks passed."
