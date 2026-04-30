@@ -25,32 +25,34 @@ set -euo pipefail
 
 mkdir -p /app/config
 cat > /app/config/application.conf <<EOF
-db {
-  host     = "${FAMILYDNS_DB_HOST}"
-  port     = ${FAMILYDNS_DB_PORT}
-  database = "${FAMILYDNS_DB_NAME}"
-  user     = "${FAMILYDNS_DB_USER}"
-  password = "${FAMILYDNS_DB_PASSWORD}"
-  poolSize = 5
-}
-http {
-  host      = "${FAMILYDNS_HTTP_HOST}"
-  port      = ${FAMILYDNS_HTTP_PORT}
-  staticDir = "${FAMILYDNS_STATIC_DIR}"
-}
-jwt {
-  secret      = "${FAMILYDNS_JWT_SECRET}"
-  expiryHours = ${FAMILYDNS_JWT_HOURS}
-}
-dns {
-  cacheRefreshSeconds = ${FAMILYDNS_DNS_REFRESH}
-  port                = ${FAMILYDNS_DNS_PORT}
-  location            = "${FAMILYDNS_DNS_LOCATION}"
-  upstreamPrimary     = "${FAMILYDNS_DNS_UPSTREAM_PRIMARY}"
-  upstreamSecondary   = "${FAMILYDNS_DNS_UPSTREAM_SECONDARY}"
-  upstreamPort        = ${FAMILYDNS_DNS_UPSTREAM_PORT}
-  logBatchSize        = ${FAMILYDNS_DNS_LOG_BATCH}
-  logFlushSeconds     = ${FAMILYDNS_DNS_LOG_FLUSH}
+familydns {
+  db {
+    host     = "${FAMILYDNS_DB_HOST}"
+    port     = ${FAMILYDNS_DB_PORT}
+    database = "${FAMILYDNS_DB_NAME}"
+    user     = "${FAMILYDNS_DB_USER}"
+    password = "${FAMILYDNS_DB_PASSWORD}"
+    poolSize = 5
+  }
+  http {
+    host      = "${FAMILYDNS_HTTP_HOST}"
+    port      = ${FAMILYDNS_HTTP_PORT}
+    staticDir = "${FAMILYDNS_STATIC_DIR}"
+  }
+  jwt {
+    secret      = "${FAMILYDNS_JWT_SECRET}"
+    expiryHours = ${FAMILYDNS_JWT_HOURS}
+  }
+  dns {
+    cacheRefreshSeconds = ${FAMILYDNS_DNS_REFRESH}
+    port                = ${FAMILYDNS_DNS_PORT}
+    location            = "${FAMILYDNS_DNS_LOCATION}"
+    upstreamPrimary     = "${FAMILYDNS_DNS_UPSTREAM_PRIMARY}"
+    upstreamSecondary   = "${FAMILYDNS_DNS_UPSTREAM_SECONDARY}"
+    upstreamPort        = ${FAMILYDNS_DNS_UPSTREAM_PORT}
+    logBatchSize        = ${FAMILYDNS_DNS_LOG_BATCH}
+    logFlushSeconds     = ${FAMILYDNS_DNS_LOG_FLUSH}
+  }
 }
 EOF
 
@@ -68,7 +70,7 @@ fi
 
 cd /app
 case "$FAMILYDNS_MODE" in
-  api) exec java -Xms256m -Xmx512m -jar /app/api.jar ;;
-  dns) exec java -Xms128m -Xmx256m -jar /app/dns.jar ;;
+  api) exec java -Xms256m -Xmx512m -Dconfig.file=/app/config/application.conf -jar /app/api.jar ;;
+  dns) exec java -Xms128m -Xmx256m -Dconfig.file=/app/config/application.conf -jar /app/dns.jar ;;
   *)   echo "[entrypoint] unknown FAMILYDNS_MODE=$FAMILYDNS_MODE" >&2; exit 1 ;;
 esac
