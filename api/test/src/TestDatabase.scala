@@ -15,11 +15,23 @@ import zio.interop.catz.*
  */
 object TestDatabase:
 
-  /** JVM-wide singleton: started once, shared across all ZIOSpec bootstrap layers in this JVM. */
-  private lazy val sharedPg: EmbeddedPostgres =
-    val pg = EmbeddedPostgres.start()
-    runMigrations(pg)
-    pg
+  // JVM-wide singleton: started once, shared across all ZIOSpec bootstrap layers
+  // in this JVM. We don't use `lazy val` here — Scala 3 lazy vals can let two
+  // racing threads both run the initializer, and EmbeddedPostgres.prepareBinaries
+  // takes an internal file lock that throws OverlappingFileLockException on the
+  // second concurrent call. Explicit double-checked locking serializes init.
+  private val pgLock                                 = new Object
+  @volatile private var pgInstance: EmbeddedPostgres = null
+  private def sharedPg: EmbeddedPostgres             =
+    val cached = pgInstance
+    if cached != null then cached
+    else
+      pgLock.synchronized:
+        if pgInstance == null then
+          val pg = EmbeddedPostgres.start()
+          runMigrations(pg)
+          pgInstance = pg
+        pgInstance
 
   /** Run V1__init.sql from the test resources directory on the classpath. */
   private[testinfra] def runMigrations(pg: EmbeddedPostgres): Unit =
