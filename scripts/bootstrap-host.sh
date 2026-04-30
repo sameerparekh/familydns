@@ -127,6 +127,8 @@ log "Installing systemd units..."
 sudo install -d /etc/systemd/system
 sudo ln -sfn "$PREFIX/repo/deploy/familydns-api.service" \
      /etc/systemd/system/familydns-api.service
+sudo ln -sfn "$PREFIX/repo/deploy/familydns-dns.service" \
+     /etc/systemd/system/familydns-dns.service
 
 sudo tee /etc/systemd/system/familydns-deploy.service >/dev/null <<EOF
 [Unit]
@@ -166,7 +168,7 @@ fi
 
 # ── 7. Sudoers rule for the deploy user ───────────────────────────────────
 sudo tee /etc/sudoers.d/familydns-deploy >/dev/null <<EOF
-$USER_NAME ALL=(root) NOPASSWD: /bin/systemctl restart familydns-api.service, /usr/bin/install, /bin/mv, /bin/rm, /bin/cp, /usr/bin/tee
+$USER_NAME ALL=(root) NOPASSWD: /bin/systemctl restart familydns-api.service, /bin/systemctl restart familydns-dns.service, /usr/bin/install, /bin/mv, /bin/rm, /bin/cp, /usr/bin/tee
 EOF
 sudo chmod 0440 /etc/sudoers.d/familydns-deploy
 
@@ -177,7 +179,7 @@ cat <<MSG
 Next steps:
   1. Edit /etc/familydns/application.conf — set jwt.secret + db.password.
   2. (Optional) /etc/familydns/api.env for environment overrides.
-  3. sudo systemctl enable --now familydns-api.service
+  3. sudo systemctl enable --now familydns-api.service familydns-dns.service
   4. sudo systemctl enable --now familydns-deploy.timer
   5. Initial build/deploy:
        sudo -u $USER_NAME FAMILYDNS_BRANCH=$BRANCH $PREFIX/repo/scripts/deploy.sh

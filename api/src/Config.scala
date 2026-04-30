@@ -34,6 +34,13 @@ case class JwtConfig(
 
 case class DnsClientConfig(
     cacheRefreshSeconds: Int,
+    port: Int,
+    location: String,
+    upstreamPrimary: String,
+    upstreamSecondary: String,
+    upstreamPort: Int,
+    logBatchSize: Int,
+    logFlushSeconds: Int,
 )
 
 object AppConfig:

@@ -14,6 +14,14 @@ set -euo pipefail
 : "${FAMILYDNS_JWT_SECRET:=staging-jwt-secret-do-not-use-in-prod-32ch}"
 : "${FAMILYDNS_JWT_HOURS:=24}"
 : "${FAMILYDNS_DNS_REFRESH:=10}"
+: "${FAMILYDNS_DNS_PORT:=5353}"
+: "${FAMILYDNS_DNS_LOCATION:=staging}"
+: "${FAMILYDNS_DNS_UPSTREAM_PRIMARY:=1.1.1.1}"
+: "${FAMILYDNS_DNS_UPSTREAM_SECONDARY:=8.8.8.8}"
+: "${FAMILYDNS_DNS_UPSTREAM_PORT:=53}"
+: "${FAMILYDNS_DNS_LOG_BATCH:=500}"
+: "${FAMILYDNS_DNS_LOG_FLUSH:=5}"
+: "${FAMILYDNS_MODE:=api}"
 
 mkdir -p /app/config
 cat > /app/config/application.conf <<EOF
@@ -36,6 +44,13 @@ jwt {
 }
 dns {
   cacheRefreshSeconds = ${FAMILYDNS_DNS_REFRESH}
+  port                = ${FAMILYDNS_DNS_PORT}
+  location            = "${FAMILYDNS_DNS_LOCATION}"
+  upstreamPrimary     = "${FAMILYDNS_DNS_UPSTREAM_PRIMARY}"
+  upstreamSecondary   = "${FAMILYDNS_DNS_UPSTREAM_SECONDARY}"
+  upstreamPort        = ${FAMILYDNS_DNS_UPSTREAM_PORT}
+  logBatchSize        = ${FAMILYDNS_DNS_LOG_BATCH}
+  logFlushSeconds     = ${FAMILYDNS_DNS_LOG_FLUSH}
 }
 EOF
 
@@ -52,4 +67,8 @@ if [ "${WAIT_FOR_POSTGRES:-1}" = "1" ]; then
 fi
 
 cd /app
-exec java -Xms256m -Xmx512m -jar /app/api.jar
+case "$FAMILYDNS_MODE" in
+  api) exec java -Xms256m -Xmx512m -jar /app/api.jar ;;
+  dns) exec java -Xms128m -Xmx256m -jar /app/dns.jar ;;
+  *)   echo "[entrypoint] unknown FAMILYDNS_MODE=$FAMILYDNS_MODE" >&2; exit 1 ;;
+esac
