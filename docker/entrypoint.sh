@@ -17,25 +17,27 @@ set -euo pipefail
 
 mkdir -p /app/config
 cat > /app/config/application.conf <<EOF
-db {
-  host     = "${FAMILYDNS_DB_HOST}"
-  port     = ${FAMILYDNS_DB_PORT}
-  database = "${FAMILYDNS_DB_NAME}"
-  user     = "${FAMILYDNS_DB_USER}"
-  password = "${FAMILYDNS_DB_PASSWORD}"
-  poolSize = 5
-}
-http {
-  host      = "${FAMILYDNS_HTTP_HOST}"
-  port      = ${FAMILYDNS_HTTP_PORT}
-  staticDir = "${FAMILYDNS_STATIC_DIR}"
-}
-jwt {
-  secret      = "${FAMILYDNS_JWT_SECRET}"
-  expiryHours = ${FAMILYDNS_JWT_HOURS}
-}
-dns {
-  cacheRefreshSeconds = ${FAMILYDNS_DNS_REFRESH}
+familydns {
+  db {
+    host     = "${FAMILYDNS_DB_HOST}"
+    port     = ${FAMILYDNS_DB_PORT}
+    database = "${FAMILYDNS_DB_NAME}"
+    user     = "${FAMILYDNS_DB_USER}"
+    password = "${FAMILYDNS_DB_PASSWORD}"
+    poolSize = 5
+  }
+  http {
+    host      = "${FAMILYDNS_HTTP_HOST}"
+    port      = ${FAMILYDNS_HTTP_PORT}
+    staticDir = "${FAMILYDNS_STATIC_DIR}"
+  }
+  jwt {
+    secret      = "${FAMILYDNS_JWT_SECRET}"
+    expiryHours = ${FAMILYDNS_JWT_HOURS}
+  }
+  dns {
+    cacheRefreshSeconds = ${FAMILYDNS_DNS_REFRESH}
+  }
 }
 EOF
 
@@ -52,4 +54,4 @@ if [ "${WAIT_FOR_POSTGRES:-1}" = "1" ]; then
 fi
 
 cd /app
-exec java -Xms256m -Xmx512m -jar /app/api.jar
+exec java -Xms256m -Xmx512m -Dconfig.file=/app/config/application.conf -jar /app/api.jar
