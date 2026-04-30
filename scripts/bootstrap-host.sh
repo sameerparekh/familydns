@@ -43,8 +43,10 @@ log() { echo "[bootstrap] $*"; }
 log "Installing system packages (apt)..."
 if command -v apt-get >/dev/null 2>&1; then
   sudo apt-get update -qq
+  # libpcap0.8: pcap4j (traffic monitor) loads it via JNA at runtime.
   sudo apt-get install -y -qq \
-    openjdk-21-jdk-headless ca-certificates curl git gnupg sudo
+    openjdk-21-jdk-headless ca-certificates curl git gnupg sudo \
+    libpcap0.8
   if ! command -v node >/dev/null 2>&1 \
      || ! node --version 2>/dev/null | grep -qE '^v(22|23|24)\.'; then
     curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
@@ -127,6 +129,8 @@ log "Installing systemd units..."
 sudo install -d /etc/systemd/system
 sudo ln -sfn "$PREFIX/repo/deploy/familydns-api.service" \
      /etc/systemd/system/familydns-api.service
+sudo ln -sfn "$PREFIX/repo/deploy/familydns-traffic.service" \
+     /etc/systemd/system/familydns-traffic.service
 
 sudo tee /etc/systemd/system/familydns-deploy.service >/dev/null <<EOF
 [Unit]
@@ -166,7 +170,7 @@ fi
 
 # ── 7. Sudoers rule for the deploy user ───────────────────────────────────
 sudo tee /etc/sudoers.d/familydns-deploy >/dev/null <<EOF
-$USER_NAME ALL=(root) NOPASSWD: /bin/systemctl restart familydns-api.service, /usr/bin/install, /bin/mv, /bin/rm, /bin/cp, /usr/bin/tee
+$USER_NAME ALL=(root) NOPASSWD: /bin/systemctl restart familydns-api.service, /bin/systemctl restart familydns-traffic.service, /usr/bin/install, /bin/mv, /bin/rm, /bin/cp, /usr/bin/tee
 EOF
 sudo chmod 0440 /etc/sudoers.d/familydns-deploy
 
@@ -178,6 +182,8 @@ Next steps:
   1. Edit /etc/familydns/application.conf — set jwt.secret + db.password.
   2. (Optional) /etc/familydns/api.env for environment overrides.
   3. sudo systemctl enable --now familydns-api.service
+     # Traffic monitor (optional — needs the right NIC name in application.conf):
+     #   sudo systemctl enable --now familydns-traffic.service
   4. sudo systemctl enable --now familydns-deploy.timer
   5. Initial build/deploy:
        sudo -u $USER_NAME FAMILYDNS_BRANCH=$BRANCH $PREFIX/repo/scripts/deploy.sh
