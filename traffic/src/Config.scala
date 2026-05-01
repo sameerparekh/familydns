@@ -14,10 +14,11 @@ case class TrafficAppConfig(
 object TrafficAppConfig:
   val layer: ZLayer[Any, Config.Error, TrafficAppConfig] =
     ZLayer.fromZIO:
+      val path = sys.props.getOrElse("config.file", "config/application.conf")
       read(
-        deriveConfig[TrafficAppConfig].from(
-          TypesafeConfigProvider.fromHoconFile(
-            new java.io.File("config/application.conf"),
+        deriveConfig[TrafficAppConfig]
+          .nested("familydns")
+          .from(
+            TypesafeConfigProvider.fromHoconFile(new java.io.File(path)),
           ),
-        ),
       )
