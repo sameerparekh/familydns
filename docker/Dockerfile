@@ -51,10 +51,10 @@ COPY config/application.conf.example /app/application.conf.example
 COPY docker/entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 
-EXPOSE 8080 5353/udp
+EXPOSE 8080 5354/udp
 
 ENV FAMILYDNS_HTTP_PORT=8080 \
-    FAMILYDNS_DNS_PORT=5353 \
+    FAMILYDNS_DNS_PORT=5354 \
     FAMILYDNS_STATIC_DIR=/app/web
 
 ENTRYPOINT ["/app/entrypoint.sh"]
