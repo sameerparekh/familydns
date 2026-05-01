@@ -11,7 +11,7 @@ const navItems = [
 ]
 
 export function Layout() {
-  const { username, isAdmin, logout } = useAuth()
+  const { username, role, logout } = useAuth()
   const navigate = useNavigate()
   const [menuOpen, setMenuOpen] = useState(false)
 
@@ -62,7 +62,7 @@ export function Layout() {
 
           <div className="flex items-center gap-3">
             <span className="hidden sm:block text-xs text-gray-500 font-mono">
-              {username} {isAdmin ? '· admin' : '· readonly'}
+              {username} · {role ?? 'guest'}
             </span>
             <button
               onClick={handleLogout}

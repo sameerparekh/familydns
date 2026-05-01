@@ -42,10 +42,20 @@ case class LogFilter(
 
 trait UserRepo:
   def findByUsername(u: String): Task[Option[DbUser]]
+  def findById(id: Long): Task[Option[DbUser]]
   def create(u: String, h: String, r: String): Task[Long]
   def updatePassword(id: Long, h: String): Task[Unit]
   def listAll: Task[List[DbUser]]
   def delete(id: Long): Task[Unit]
+
+trait UserProfileRepo:
+  def listProfilesForUser(userId: Long): Task[List[Long]]
+  def listProfilesForUsername(username: String): Task[List[Long]]
+  def listAllMappings: Task[List[(Long, Long)]] // (userId, profileId)
+  def setProfilesForUser(userId: Long, profileIds: List[Long]): Task[Unit]
+  def addLink(userId: Long, profileId: Long): Task[Unit]
+  def removeLink(userId: Long, profileId: Long): Task[Unit]
+  def hasAccess(userId: Long, profileId: Long): Task[Boolean]
 
 trait ProfileRepo:
   def listAll: Task[List[Profile]]
@@ -112,6 +122,12 @@ class UserRepoLive(xa: Transactor[Task]) extends UserRepo:
       .map(DbUser.apply)
       .option
       .transact(xa)
+  def findById(id: Long)                      =
+    sql"SELECT id,username,password_hash,role,created_at FROM users WHERE id=$id"
+      .query[(Long, String, String, String, Instant)]
+      .map(DbUser.apply)
+      .option
+      .transact(xa)
   def create(u: String, h: String, r: String) =
     sql"INSERT INTO users(username,password_hash,role) VALUES($u,$h,$r) RETURNING id"
       .query[Long]
@@ -125,6 +141,43 @@ class UserRepoLive(xa: Transactor[Task]) extends UserRepo:
     .to[List]
     .transact(xa)
   def delete(id: Long) = sql"DELETE FROM users WHERE id=$id".update.run.transact(xa).unit
+
+class UserProfileRepoLive(xa: Transactor[Task]) extends UserProfileRepo:
+  def listProfilesForUser(userId: Long)                  =
+    sql"SELECT profile_id FROM user_profiles WHERE user_id=$userId ORDER BY profile_id"
+      .query[Long]
+      .to[List]
+      .transact(xa)
+  def listProfilesForUsername(u: String)                 =
+    sql"SELECT up.profile_id FROM user_profiles up JOIN users us ON us.id=up.user_id WHERE us.username=$u ORDER BY up.profile_id"
+      .query[Long]
+      .to[List]
+      .transact(xa)
+  def listAllMappings                                    =
+    sql"SELECT user_id, profile_id FROM user_profiles"
+      .query[(Long, Long)]
+      .to[List]
+      .transact(xa)
+  def setProfilesForUser(userId: Long, pids: List[Long]) =
+    val del = sql"DELETE FROM user_profiles WHERE user_id=$userId".update.run
+    val ins = pids.distinct.map(pid =>
+      sql"INSERT INTO user_profiles(user_id,profile_id) VALUES($userId,$pid) ON CONFLICT DO NOTHING".update.run,
+    )
+    (del *> ins.foldLeft(FC.unit)(_ *> _.void)).transact(xa)
+  def addLink(userId: Long, pid: Long)                   =
+    sql"INSERT INTO user_profiles(user_id,profile_id) VALUES($userId,$pid) ON CONFLICT DO NOTHING".update.run
+      .transact(xa)
+      .unit
+  def removeLink(userId: Long, pid: Long)                =
+    sql"DELETE FROM user_profiles WHERE user_id=$userId AND profile_id=$pid".update.run
+      .transact(xa)
+      .unit
+  def hasAccess(userId: Long, pid: Long)                 =
+    sql"SELECT 1 FROM user_profiles WHERE user_id=$userId AND profile_id=$pid"
+      .query[Int]
+      .option
+      .transact(xa)
+      .map(_.isDefined)
 
 class ProfileRepoLive(xa: Transactor[Task]) extends ProfileRepo:
   private type R = (Long, String, List[String], List[String], List[String], Boolean)
@@ -412,6 +465,7 @@ class QueryLogRepoLive(xa: Transactor[Task]) extends QueryLogRepo:
 
 object Repos:
   val userRepo          = ZLayer.fromFunction(UserRepoLive(_))
+  val userProfileRepo   = ZLayer.fromFunction(UserProfileRepoLive(_))
   val profileRepo       = ZLayer.fromFunction(ProfileRepoLive(_))
   val scheduleRepo      = ZLayer.fromFunction(ScheduleRepoLive(_))
   val timeLimitRepo     = ZLayer.fromFunction(TimeLimitRepoLive(_))
@@ -422,4 +476,4 @@ object Repos:
   val timeExtRepo       = ZLayer.fromFunction(TimeExtensionRepoLive(_))
   val queryLogRepo      = ZLayer.fromFunction(QueryLogRepoLive(_))
   val all               =
-    userRepo ++ profileRepo ++ scheduleRepo ++ timeLimitRepo ++ siteTimeLimitRepo ++ deviceRepo ++ blocklistRepo ++ timeUsageRepo ++ timeExtRepo ++ queryLogRepo
+    userRepo ++ userProfileRepo ++ profileRepo ++ scheduleRepo ++ timeLimitRepo ++ siteTimeLimitRepo ++ deviceRepo ++ blocklistRepo ++ timeUsageRepo ++ timeExtRepo ++ queryLogRepo

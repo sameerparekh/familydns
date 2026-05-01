@@ -115,16 +115,36 @@ export interface TimeExtension {
   createdAt: string
 }
 
+export type UserRole = 'admin' | 'adult' | 'child'
+
 export interface User {
   id: number
   username: string
-  role: string
+  role: UserRole
+  profileIds: number[]
 }
 
 export interface LoginResponse {
   token: string
-  role: string
+  role: UserRole
   username: string
+}
+
+export interface MeResponse {
+  username: string
+  role: UserRole
+  profileIds: number[]
+}
+
+export interface CreateUserRequest {
+  username: string
+  password: string
+  role: UserRole
+  profileIds: number[]
+}
+
+export interface SetUserProfilesRequest {
+  profileIds: number[]
 }
 
 // ── Request types ──────────────────────────────────────────────────────────
