@@ -31,11 +31,11 @@ object LogApiSpec extends ZIOSpec[TestDatabase.AllRepos & EmbeddedPostgres & Clo
   def spec = suite("Query Log API")(
     test("GET /api/logs returns inserted logs") {
       for
-        _       <- cleanDb
-        logRepo <- ZIO.service[QueryLogRepo]
-        auth    <- makeAuth
-        token   <- auth.login("admin", "changeme").map(_.token)
-        _       <- insertLogs(
+        _               <- cleanDb
+        logRepo         <- ZIO.service[QueryLogRepo]
+        auth            <- makeAuth
+        token           <- auth.login("admin", "changeme").map(_.token)
+        _               <- insertLogs(
           logRepo,
           List(
             QueryLogInsert(
@@ -73,7 +73,8 @@ object LogApiSpec extends ZIOSpec[TestDatabase.AllRepos & EmbeddedPostgres & Clo
             ),
           ),
         )
-        routes = LogRoutes.routes(auth, logRepo)
+        userProfileRepo <- ZIO.service[UserProfileRepo]
+        routes = LogRoutes.routes(auth, logRepo, userProfileRepo)
         req    = Request
           .get(URL.decode("/api/logs").toOption.get)
           .addHeader(Header.Authorization.Bearer(token))
@@ -85,11 +86,11 @@ object LogApiSpec extends ZIOSpec[TestDatabase.AllRepos & EmbeddedPostgres & Clo
     },
     test("GET /api/logs?blocked=true filters to blocked only") {
       for
-        _       <- cleanDb
-        logRepo <- ZIO.service[QueryLogRepo]
-        auth    <- makeAuth
-        token   <- auth.login("admin", "changeme").map(_.token)
-        _       <- insertLogs(
+        _               <- cleanDb
+        logRepo         <- ZIO.service[QueryLogRepo]
+        auth            <- makeAuth
+        token           <- auth.login("admin", "changeme").map(_.token)
+        _               <- insertLogs(
           logRepo,
           List(
             QueryLogInsert(
@@ -116,7 +117,8 @@ object LogApiSpec extends ZIOSpec[TestDatabase.AllRepos & EmbeddedPostgres & Clo
             ),
           ),
         )
-        routes = LogRoutes.routes(auth, logRepo)
+        userProfileRepo <- ZIO.service[UserProfileRepo]
+        routes = LogRoutes.routes(auth, logRepo, userProfileRepo)
         req    = Request
           .get(URL.decode("/api/logs?blocked=true").toOption.get)
           .addHeader(Header.Authorization.Bearer(token))
@@ -129,11 +131,11 @@ object LogApiSpec extends ZIOSpec[TestDatabase.AllRepos & EmbeddedPostgres & Clo
     },
     test("GET /api/stats returns correct counts") {
       for
-        _       <- cleanDb
-        logRepo <- ZIO.service[QueryLogRepo]
-        auth    <- makeAuth
-        token   <- auth.login("admin", "changeme").map(_.token)
-        _       <- insertLogs(
+        _               <- cleanDb
+        logRepo         <- ZIO.service[QueryLogRepo]
+        auth            <- makeAuth
+        token           <- auth.login("admin", "changeme").map(_.token)
+        _               <- insertLogs(
           logRepo,
           List(
             QueryLogInsert(
@@ -171,7 +173,8 @@ object LogApiSpec extends ZIOSpec[TestDatabase.AllRepos & EmbeddedPostgres & Clo
             ),
           ),
         )
-        routes = LogRoutes.routes(auth, logRepo)
+        userProfileRepo <- ZIO.service[UserProfileRepo]
+        routes = LogRoutes.routes(auth, logRepo, userProfileRepo)
         req    = Request
           .get(URL.decode("/api/stats").toOption.get)
           .addHeader(Header.Authorization.Bearer(token))
@@ -186,11 +189,11 @@ object LogApiSpec extends ZIOSpec[TestDatabase.AllRepos & EmbeddedPostgres & Clo
     },
     test("GET /api/logs?mac=... filters to one device") {
       for
-        _       <- cleanDb
-        logRepo <- ZIO.service[QueryLogRepo]
-        auth    <- makeAuth
-        token   <- auth.login("admin", "changeme").map(_.token)
-        _       <- insertLogs(
+        _               <- cleanDb
+        logRepo         <- ZIO.service[QueryLogRepo]
+        auth            <- makeAuth
+        token           <- auth.login("admin", "changeme").map(_.token)
+        _               <- insertLogs(
           logRepo,
           List(
             QueryLogInsert(
@@ -217,7 +220,8 @@ object LogApiSpec extends ZIOSpec[TestDatabase.AllRepos & EmbeddedPostgres & Clo
             ),
           ),
         )
-        routes = LogRoutes.routes(auth, logRepo)
+        userProfileRepo <- ZIO.service[UserProfileRepo]
+        routes = LogRoutes.routes(auth, logRepo, userProfileRepo)
         req    = Request
           .get(
             URL.decode("/api/logs?mac=aa:bb:cc:dd:ee:01").toOption.get,

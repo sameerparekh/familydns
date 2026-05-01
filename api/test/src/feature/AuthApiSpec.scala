@@ -58,25 +58,25 @@ object AuthApiSpec extends ZIOSpec[TestDatabase.AllRepos & EmbeddedPostgres & Cl
       yield assertTrue(claims.sub == "admin") &&
         assertTrue(claims.role == "admin")
     },
-    test("admin can create readonly user who can then login") {
+    test("admin can create child user who can then login") {
       for
         _        <- cleanDb
         userRepo <- ZIO.service[UserRepo]
         auth     <- makeAuth
         hash     <- auth.hashPassword("childpass")
-        _        <- userRepo.create("child1", hash, "readonly")
+        _        <- userRepo.create("child1", hash, "child")
         resp     <- auth.login("child1", "childpass")
         claims   <- auth.verify(resp.token)
-      yield assertTrue(resp.role == "readonly") &&
-        assertTrue(claims.role == "readonly")
+      yield assertTrue(resp.role == "child") &&
+        assertTrue(claims.role == "child")
     },
-    test("readonly token fails requireAdmin check") {
+    test("child token fails requireAdmin check") {
       for
         _        <- cleanDb
         userRepo <- ZIO.service[UserRepo]
         auth     <- makeAuth
         hash     <- auth.hashPassword("pass")
-        _        <- userRepo.create("viewer", hash, "readonly")
+        _        <- userRepo.create("viewer", hash, "child")
         resp     <- auth.login("viewer", "pass")
         result   <- auth.requireAdmin(resp.token).exit
       yield assertTrue(result.isFailure)
@@ -93,10 +93,11 @@ object AuthApiSpec extends ZIOSpec[TestDatabase.AllRepos & EmbeddedPostgres & Cl
     },
     test("POST /api/auth/login via HTTP handler") {
       for
-        _        <- cleanDb
-        userRepo <- ZIO.service[UserRepo]
-        auth     <- makeAuth
-        routes = AuthRoutes.routes(auth, userRepo)
+        _               <- cleanDb
+        userRepo        <- ZIO.service[UserRepo]
+        auth            <- makeAuth
+        userProfileRepo <- ZIO.service[UserProfileRepo]
+        routes = AuthRoutes.routes(auth, userRepo, userProfileRepo)
         body   = LoginRequest("admin", "changeme").toJson
         req    = Request
           .post(URL.decode("/api/auth/login").toOption.get, Body.fromString(body))

@@ -1,7 +1,7 @@
 import type {
-  DashboardStats, Device, DeviceTimeStatus, LoginResponse,
-  ProfileDetail, QueryLog, TimeExtension, UpsertDeviceRequest,
-  UpsertProfileRequest, GrantExtensionRequest, User,
+  CreateUserRequest, DashboardStats, Device, DeviceTimeStatus, LoginResponse,
+  MeResponse, ProfileDetail, QueryLog, SetUserProfilesRequest, TimeExtension,
+  UpsertDeviceRequest, UpsertProfileRequest, GrantExtensionRequest, User,
 } from '@/types/api'
 
 const BASE = '/api'
@@ -52,13 +52,16 @@ export const api = {
       req<LoginResponse>('POST', '/auth/login', { username, password }, true),
     changePassword: (currentPassword: string, newPassword: string) =>
       req<void>('POST', '/auth/change-password', { currentPassword, newPassword }),
+    me: () => req<MeResponse>('GET', '/me'),
   },
 
   // ── Users ──────────────────────────────────────────────────────────────
   users: {
     list: () => req<User[]>('GET', '/users'),
-    create: (username: string, password: string, role: string) =>
-      req<{ id: number }>('POST', '/users', { username, password, role }),
+    create: (data: CreateUserRequest) =>
+      req<{ id: number }>('POST', '/users', data),
+    setProfiles: (id: number, profileIds: number[]) =>
+      req<void>('PUT', `/users/${id}/profiles`, { profileIds } as SetUserProfilesRequest),
     delete: (id: number) => req<void>('DELETE', `/users/${id}`),
   },
 
