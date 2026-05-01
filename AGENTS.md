@@ -120,7 +120,7 @@ mill __.fix
 
 Migrations live in `api/resources/db/migration/` as `V{n}__{description}.sql`. They run automatically on API startup via Flyway. Never edit existing migrations — always add a new one.
 
-Test infra reads `V1__init.sql` directly from the test classpath, so when adding a migration also keep `api/test/resources/V1__init.sql` and `dns/test/resources/V1__init.sql` in sync.
+Tests run the same Flyway migrations from `classpath:db/migration` against the embedded Postgres in `TestDatabase`, so there is one source of truth — never maintain a parallel test schema. To change the schema, add a new `V{n}__...sql` migration; do not edit `V1__init.sql` (or any other already-applied migration).
 
 ## Adding a new API route
 
@@ -141,6 +141,16 @@ Test infra reads `V1__init.sql` directly from the test classpath, so when adding
 - Admin vs ReadOnly enforced via JWT claims + middleware
 - SQL injection impossible via Doobie parameterized queries
 - Config file contains DB credentials — never commit it (in .gitignore)
+
+## TDD workflow (required for new features and bug fixes)
+
+For any new feature or bug fix, follow test-driven development:
+
+1. **Write the test first.** Before implementing, write the unit and/or feature test(s) that describe the desired behavior. For bugs, the test should fail in the way the bug manifests; for features, it should describe the new behavior.
+2. **Validate the test logic with the user before writing implementation code.** Show the test to the user and ask them to confirm the test correctly describes the intended behavior. Do not skip this step — the test is the spec.
+3. **Only after the user confirms, implement the code** to make the test pass.
+
+This applies to both unit tests and feature tests — pick whichever level fits the change (see "Testing philosophy" below).
 
 ## Testing philosophy
 

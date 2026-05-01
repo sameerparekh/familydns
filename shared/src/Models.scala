@@ -3,7 +3,18 @@ package familydns.shared
 import zio.json.*
 
 enum UserRole derives JsonCodec:
-  case Admin, ReadOnly
+  case Admin, Adult, Child
+
+object UserRole:
+  def parse(s: String): Option[UserRole] = s.toLowerCase match
+    case "admin" => Some(Admin)
+    case "adult" => Some(Adult)
+    case "child" => Some(Child)
+    case _       => None
+  def asString(r: UserRole): String      = r match
+    case Admin => "admin"
+    case Adult => "adult"
+    case Child => "child"
 
 case class Profile(
     id: Long,
@@ -84,7 +95,24 @@ case class QueryLog(
 case class LoginRequest(username: String, password: String) derives JsonCodec
 case class LoginResponse(token: String, role: String, username: String) derives JsonCodec
 case class ChangePasswordRequest(currentPassword: String, newPassword: String) derives JsonCodec
-case class CreateUserRequest(username: String, password: String, role: String) derives JsonCodec
+case class CreateUserRequest(
+    username: String,
+    password: String,
+    role: String,
+    profileIds: List[Long] = Nil,
+) derives JsonCodec
+case class UserSummary(
+    id: Long,
+    username: String,
+    role: String,
+    profileIds: List[Long],
+) derives JsonCodec
+case class MeResponse(
+    username: String,
+    role: String,
+    profileIds: List[Long],
+) derives JsonCodec
+case class SetUserProfilesRequest(profileIds: List[Long]) derives JsonCodec
 
 case class UpsertProfileRequest(
     name: String,

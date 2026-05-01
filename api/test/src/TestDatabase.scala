@@ -3,6 +3,7 @@ package familydns.testinfra
 import doobie.Transactor
 import familydns.api.db.*
 import io.zonky.test.db.postgres.embedded.EmbeddedPostgres
+import org.flywaydb.core.Flyway
 import zio.*
 import zio.interop.catz.*
 
@@ -33,20 +34,16 @@ object TestDatabase:
           pgInstance = pg
         pgInstance
 
-  /** Run V1__init.sql from the test resources directory on the classpath. */
+  /** Run the production Flyway migrations (`classpath:db/migration`) against the embedded PG. */
   private[testinfra] def runMigrations(pg: EmbeddedPostgres): Unit =
-    val url  = getClass.getResource("/V1__init.sql")
-    if url == null then
-      throw new RuntimeException(
-        "V1__init.sql not found on classpath. Expected in api/test/resources/.",
-      )
-    val sql  = scala.io.Source.fromURL(url).mkString
-    val conn = pg.getPostgresDatabase.getConnection
-    try
-      val stmt = conn.createStatement()
-      sql.split(";").map(_.trim).filterNot(_.isEmpty).foreach(stmt.execute)
-      stmt.close()
-    finally conn.close()
+    Flyway
+      .configure()
+      .dataSource(pg.getPostgresDatabase)
+      .locations("classpath:db/migration")
+      .baselineOnMigrate(true)
+      .load()
+      .migrate()
+    ()
 
   /** Provides the shared EmbeddedPostgres instance (no lifecycle: lives for JVM lifetime). */
   val embeddedPg: ZLayer[Any, Throwable, EmbeddedPostgres] =
@@ -79,8 +76,8 @@ object TestDatabase:
 
   /** All repo types bundled for convenience */
   type AllRepos =
-    UserRepo & ProfileRepo & ScheduleRepo & TimeLimitRepo & SiteTimeLimitRepo & DeviceRepo &
-      BlocklistRepo & TimeUsageRepo & TimeExtensionRepo & QueryLogRepo
+    UserRepo & UserProfileRepo & ProfileRepo & ScheduleRepo & TimeLimitRepo & SiteTimeLimitRepo &
+      DeviceRepo & BlocklistRepo & TimeUsageRepo & TimeExtensionRepo & QueryLogRepo
 
   val layer: ZLayer[Any, Throwable, EmbeddedPostgres & Transactor[Task] & AllRepos] =
     val pg = embeddedPg
