@@ -116,25 +116,26 @@ object DnsMain extends ZIOAppDefault:
       cacheRef <- Ref.make(DnsCache.empty)
       usageRef <- Ref.make(TimeUsageSnapshot.empty)
       logQueue = new ConcurrentLinkedQueue[QueryLogEntry]()
-      _ <- loadCache
+      _          <- loadCache
         .flatMap(cacheRef.set)
         .catchAllCause(c => ZIO.logErrorCause("initial cache load failed", c))
-      _ <- loadUsage
+      _          <- loadUsage
         .flatMap(usageRef.set)
         .catchAllCause(c => ZIO.logErrorCause("initial usage load failed", c))
-      _ <- loadCache
+      _          <- loadCache
         .flatMap(cacheRef.set)
         .catchAllCause(c => ZIO.logErrorCause("cache refresh failed", c))
         .repeat(Schedule.spaced(dnsCfg.cacheRefreshSeconds.seconds))
         .forkDaemon
-      _ <- loadUsage
+      _          <- loadUsage
         .flatMap(usageRef.set)
         .catchAllCause(c => ZIO.logErrorCause("usage refresh failed", c))
         .repeat(Schedule.spaced(dnsCfg.cacheRefreshSeconds.seconds))
         .forkDaemon
-      _ <- drainLogs(logQueue, dnsCfg.logBatchSize)
+      _          <- drainLogs(logQueue, dnsCfg.logBatchSize)
         .catchAllCause(c => ZIO.logErrorCause("log drain failed", c))
         .repeat(Schedule.spaced(dnsCfg.logFlushSeconds.seconds))
         .forkDaemon
-      _ <- new DnsServer(dnsCfg, cacheRef, usageRef, logQueue).serve
+      deviceRepo <- ZIO.service[DeviceRepo]
+      _          <- new DnsServer(dnsCfg, cacheRef, usageRef, logQueue, deviceRepo).serve
     yield ()

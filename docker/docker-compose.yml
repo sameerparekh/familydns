@@ -21,7 +21,7 @@ services:
       timeout: 2s
       retries: 30
     ports:
-      - "127.0.0.1:5433:5432"
+      - "5433:5432"
 
   api:
     build:
@@ -40,7 +40,7 @@ services:
       FAMILYDNS_JWT_SECRET: "staging-jwt-secret-do-not-use-in-prod-32ch"
       FAMILYDNS_DNS_REFRESH: "5"
     ports:
-      - "127.0.0.1:8080:8080"
+      - "0.0.0.0:8080:8080"
     healthcheck:
       # Login endpoint with bad creds → 401, which proves the API + DB are alive.
       # `curl -f` would treat 401 as failure, so we check the body shape instead.
@@ -54,13 +54,18 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile
+    # host networking so /proc/net/arp reflects the real LAN ARP table and
+    # DNS is reachable from other machines without NAT obscuring the source IP.
+    network_mode: host
     depends_on:
       api:
         condition: service_healthy
     environment:
       FAMILYDNS_MODE: dns
-      FAMILYDNS_DB_HOST: postgres
-      FAMILYDNS_DB_PORT: "5432"
+      # With host networking the docker service name "postgres" isn't resolvable;
+      # reach it via the host-mapped port instead.
+      FAMILYDNS_DB_HOST: 127.0.0.1
+      FAMILYDNS_DB_PORT: "5433"
       FAMILYDNS_DB_NAME: familydns
       FAMILYDNS_DB_USER: familydns
       FAMILYDNS_DB_PASSWORD: familydns
@@ -68,8 +73,7 @@ services:
       FAMILYDNS_DNS_REFRESH: "5"
       FAMILYDNS_DNS_PORT: "5354"
       FAMILYDNS_DNS_LOCATION: "staging"
-    ports:
-      - "127.0.0.1:5354:5354/udp"
+    # No ports: mapping — host network mode binds directly to the host NIC.
 
   traffic:
     build:
