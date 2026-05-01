@@ -22,6 +22,9 @@ set -euo pipefail
 : "${FAMILYDNS_DNS_LOG_BATCH:=500}"
 : "${FAMILYDNS_DNS_LOG_FLUSH:=5}"
 : "${FAMILYDNS_MODE:=api}"
+: "${FAMILYDNS_TRAFFIC_INTERFACE:=eth0}"
+: "${FAMILYDNS_TRAFFIC_SESSION_TIMEOUT:=60}"
+: "${FAMILYDNS_TRAFFIC_FLUSH_INTERVAL:=30}"
 
 mkdir -p /app/config
 cat > /app/config/application.conf <<EOF
@@ -53,6 +56,12 @@ familydns {
     logBatchSize        = ${FAMILYDNS_DNS_LOG_BATCH}
     logFlushSeconds     = ${FAMILYDNS_DNS_LOG_FLUSH}
   }
+  traffic {
+    interface           = "${FAMILYDNS_TRAFFIC_INTERFACE}"
+    sessionTimeoutSecs  = ${FAMILYDNS_TRAFFIC_SESSION_TIMEOUT}
+    flushIntervalSecs   = ${FAMILYDNS_TRAFFIC_FLUSH_INTERVAL}
+    location            = "${FAMILYDNS_DNS_LOCATION}"
+  }
 }
 EOF
 
@@ -70,7 +79,8 @@ fi
 
 cd /app
 case "$FAMILYDNS_MODE" in
-  api) exec java -Xms256m -Xmx512m -Dconfig.file=/app/config/application.conf -jar /app/api.jar ;;
-  dns) exec java -Xms128m -Xmx256m -Dconfig.file=/app/config/application.conf -jar /app/dns.jar ;;
-  *)   echo "[entrypoint] unknown FAMILYDNS_MODE=$FAMILYDNS_MODE" >&2; exit 1 ;;
+  api)     exec java -Xms256m -Xmx512m -Dconfig.file=/app/config/application.conf -jar /app/api.jar ;;
+  dns)     exec java -Xms128m -Xmx256m -Dconfig.file=/app/config/application.conf -jar /app/dns.jar ;;
+  traffic) exec java -Xms128m -Xmx256m -Dconfig.file=/app/config/application.conf -jar /app/traffic.jar ;;
+  *)       echo "[entrypoint] unknown FAMILYDNS_MODE=$FAMILYDNS_MODE" >&2; exit 1 ;;
 esac

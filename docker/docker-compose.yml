@@ -70,3 +70,26 @@ services:
       FAMILYDNS_DNS_LOCATION: "staging"
     ports:
       - "127.0.0.1:5353:5353/udp"
+
+  traffic:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    depends_on:
+      api:
+        condition: service_healthy
+    cap_add:
+      - NET_RAW
+      - NET_ADMIN
+    environment:
+      FAMILYDNS_MODE: traffic
+      FAMILYDNS_DB_HOST: postgres
+      FAMILYDNS_DB_PORT: "5432"
+      FAMILYDNS_DB_NAME: familydns
+      FAMILYDNS_DB_USER: familydns
+      FAMILYDNS_DB_PASSWORD: familydns
+      FAMILYDNS_JWT_SECRET: "staging-jwt-secret-do-not-use-in-prod-32ch"
+      FAMILYDNS_DNS_LOCATION: "staging"
+      FAMILYDNS_TRAFFIC_INTERFACE: "eth0"
+      FAMILYDNS_TRAFFIC_SESSION_TIMEOUT: "60"
+      FAMILYDNS_TRAFFIC_FLUSH_INTERVAL: "30"
