@@ -140,6 +140,16 @@ Migrations live in `api/src/db/migrations/` as `V{n}__{description}.sql`. They r
 - SQL injection impossible via Doobie parameterized queries
 - Config file contains DB credentials — never commit it (in .gitignore)
 
+## TDD workflow (required for new features and bug fixes)
+
+For any new feature or bug fix, follow test-driven development:
+
+1. **Write the test first.** Before implementing, write the unit and/or feature test(s) that describe the desired behavior. For bugs, the test should fail in the way the bug manifests; for features, it should describe the new behavior.
+2. **Validate the test logic with the user before writing implementation code.** Show the test to the user and ask them to confirm the test correctly describes the intended behavior. Do not skip this step — the test is the spec.
+3. **Only after the user confirms, implement the code** to make the test pass.
+
+This applies to both unit tests and feature tests — pick whichever level fits the change (see "Testing philosophy" below).
+
 ## Testing philosophy
 
 ### Feature tests first, unit tests for edge cases only
