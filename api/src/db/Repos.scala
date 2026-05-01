@@ -312,7 +312,9 @@ class DeviceRepoLive(xa: Transactor[Task]) extends DeviceRepo:
       .unique
       .transact(xa)
   def updateLastSeen(mac: String, ip: String, location: String)             =
-    sql"UPDATE devices SET last_seen_ip=$ip,last_seen_at=NOW(),location=$location WHERE mac=$mac".update.run.transact(xa).unit
+    sql"UPDATE devices SET last_seen_ip=$ip,last_seen_at=NOW(),location=$location WHERE mac=$mac".update.run
+      .transact(xa)
+      .unit
   def updateProfile(mac: String, pid: Long)                                 =
     sql"UPDATE devices SET profile_id=$pid WHERE mac=$mac".update.run.transact(xa).unit
   def delete(mac: String) = sql"DELETE FROM devices WHERE mac=$mac".update.run.transact(xa).unit

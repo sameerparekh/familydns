@@ -66,54 +66,62 @@ class DnsServer(
       case None        => ZIO.unit
       case Some(query) =>
         for
-          cache    <- cacheRef.get
-          usage    <- usageRef.get
-          clientIp  = addr.getHostAddress
-          mac       = arpLookup(clientIp)
-          _        <- ZIO.logDebug(s"query from $clientIp mac=${mac.getOrElse("?")} domain=${query.domain} qtype=${query.qtype}")
+          cache <- cacheRef.get
+          usage <- usageRef.get
+          clientIp = addr.getHostAddress
+          mac      = arpLookup(clientIp)
+          _ <- ZIO.logDebug(
+            s"query from $clientIp mac=${mac.getOrElse("?")} domain=${query.domain} qtype=${query.qtype}",
+          )
           // Only fall back to the default profile when we have a real MAC that isn't registered.
           // If ARP failed (mac=None) the device is truly unrecognized and we forward+log it.
-          profile   = mac.flatMap(m => cache.deviceProfiles.get(m).orElse(cache.defaultProfile))
-          _        <- ZIO.logDebug(s"profile for mac=${mac.getOrElse("?")} -> ${profile.map(_.profile.name).getOrElse("none (unrecognized)")}")
+          profile = mac.flatMap(m => cache.deviceProfiles.get(m).orElse(cache.defaultProfile))
+          _        <- ZIO.logDebug(
+            s"profile for mac=${mac.getOrElse("?")} -> ${profile.map(_.profile.name).getOrElse("none (unrecognized)")}",
+          )
           response <- profile match
             case None     =>
               // Unknown device — forward with no filtering but log so we can identify & onboard it
-              ZIO.logDebug(s"unrecognized device ip=$clientIp mac=${mac.getOrElse("no-arp-entry")}, forwarding upstream") *>
+              ZIO.logDebug(
+                s"unrecognized device ip=$clientIp mac=${mac.getOrElse("no-arp-entry")}, forwarding upstream",
+              ) *>
                 forwardUpstream(data)
                   .map(_.getOrElse(DnsPacket.buildNxdomain(data)))
                   .tap(_ => enqueueLog(mac, None, query, blocked = false, ""))
             case Some(cp) =>
               for
                 _ <- ZIO.foreachDiscard(mac) { m =>
-                       deviceRepo
-                         .updateLastSeen(m, clientIp, config.location)
-                         .catchAllCause(c => ZIO.logWarningCause("updateLastSeen failed", c))
-                         .forkDaemon
-                     }
+                  deviceRepo
+                    .updateLastSeen(m, clientIp, config.location)
+                    .catchAllCause(c => ZIO.logWarningCause("updateLastSeen failed", c))
+                    .forkDaemon
+                }
                 now      = LocalTime.now()
                 today    = LocalDate.now()
                 decision = BlockingEngine.decide(
-                             query.domain,
-                             cp,
-                             cache.blocklists,
-                             usage,
-                             mac.getOrElse(""),
-                             now,
-                             today,
-                           )
-                _        <- ZIO.logDebug(s"decision for ${query.domain} profile=${cp.profile.name} -> $decision")
-                resp     <- decision match
-                              case BlockingEngine.Decision.Allow         =>
-                                forwardUpstream(data)
-                                  .map(_.getOrElse(DnsPacket.buildNxdomain(data)))
-                                  .tap(_ => enqueueLog(mac, Some(cp), query, blocked = false, ""))
-                              case BlockingEngine.Decision.Block(reason) =>
-                                val r =
-                                  if reason.startsWith("schedule") || reason == "paused"
-                                  then DnsPacket.buildRefused(data)
-                                  else DnsPacket.buildNxdomain(data)
-                                ZIO.succeed(r)
-                                  <* enqueueLog(mac, Some(cp), query, blocked = true, reason)
+                  query.domain,
+                  cp,
+                  cache.blocklists,
+                  usage,
+                  mac.getOrElse(""),
+                  now,
+                  today,
+                )
+                _    <- ZIO.logDebug(
+                  s"decision for ${query.domain} profile=${cp.profile.name} -> $decision",
+                )
+                resp <- decision match
+                  case BlockingEngine.Decision.Allow         =>
+                    forwardUpstream(data)
+                      .map(_.getOrElse(DnsPacket.buildNxdomain(data)))
+                      .tap(_ => enqueueLog(mac, Some(cp), query, blocked = false, ""))
+                  case BlockingEngine.Decision.Block(reason) =>
+                    val r =
+                      if reason.startsWith("schedule") || reason == "paused"
+                      then DnsPacket.buildRefused(data)
+                      else DnsPacket.buildNxdomain(data)
+                    ZIO.succeed(r)
+                      <* enqueueLog(mac, Some(cp), query, blocked = true, reason)
               yield resp
           _        <- ZIO.attempt:
             val out = new DatagramPacket(response, response.length, addr, port)
