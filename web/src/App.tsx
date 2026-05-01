@@ -8,6 +8,7 @@ import { DevicesPage } from '@/pages/DevicesPage'
 import { ProfilesPage } from '@/pages/ProfilesPage'
 import { TimePage } from '@/pages/TimePage'
 import { LogsPage } from '@/pages/LogsPage'
+import { AccountPage } from '@/pages/AccountPage'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth()
@@ -29,6 +30,7 @@ function AppRoutes() {
         <Route path="profiles"  element={<ProfilesPage />} />
         <Route path="time"      element={<TimePage />} />
         <Route path="logs"      element={<LogsPage />} />
+        <Route path="account"   element={<AccountPage />} />
       </Route>
     </Routes>
   )

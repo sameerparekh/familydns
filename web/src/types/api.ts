@@ -98,10 +98,10 @@ export interface DeviceTimeStatus {
   deviceName: string
   date: string
   profileName: string
-  dailyLimitMins: number | null
+  dailyLimitMins?: number | null
   usedMins: number
   extensionMins: number
-  remainingMins: number | null
+  remainingMins?: number | null
   siteUsage: SiteUsage[]
 }
 

@@ -49,6 +49,7 @@ object Main extends ZIOAppDefault:
       usageRepo   <- ZIO.service[TimeUsageRepo]
       extRepo     <- ZIO.service[TimeExtensionRepo]
       logRepo     <- ZIO.service[QueryLogRepo]
+      cfg         <- ZIO.service[AppConfig]
     yield AuthRoutes.routes(auth, userRepo, upRepo) ++
       ProfileRoutes.routes(auth, profileRepo, schedRepo, tlRepo, stlRepo, upRepo) ++
       DeviceRoutes.routes(auth, deviceRepo, upRepo) ++
@@ -63,4 +64,5 @@ object Main extends ZIOAppDefault:
         upRepo,
       ) ++
       LogRoutes.routes(auth, logRepo, upRepo) ++
-      BlocklistRoutes.routes(auth, blRepo)
+      BlocklistRoutes.routes(auth, blRepo) ++
+      StaticRoutes.routes(cfg.http.staticDir)

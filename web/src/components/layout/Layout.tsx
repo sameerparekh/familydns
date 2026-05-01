@@ -61,9 +61,19 @@ export function Layout() {
           </nav>
 
           <div className="flex items-center gap-3">
-            <span className="hidden sm:block text-xs text-gray-500 font-mono">
+            <NavLink
+              to="/account"
+              className={({ isActive }) =>
+                `hidden sm:block text-xs font-mono px-2 py-1 rounded transition-colors ${
+                  isActive
+                    ? 'text-emerald-400'
+                    : 'text-gray-500 hover:text-white'
+                }`
+              }
+              title="Account settings"
+            >
               {username} · {role ?? 'guest'}
-            </span>
+            </NavLink>
             <button
               onClick={handleLogout}
               className="text-xs text-gray-500 hover:text-white transition-colors px-2 py-1 rounded"
