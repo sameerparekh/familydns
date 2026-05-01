@@ -11,7 +11,7 @@ const navItems = [
 ]
 
 export function Layout() {
-  const { username, isAdmin, logout } = useAuth()
+  const { username, role, logout } = useAuth()
   const navigate = useNavigate()
   const [menuOpen, setMenuOpen] = useState(false)
 
@@ -72,7 +72,7 @@ export function Layout() {
               }
               title="Account settings"
             >
-              {username} {isAdmin ? '· admin' : '· readonly'}
+              {username} · {role ?? 'guest'}
             </NavLink>
             <button
               onClick={handleLogout}

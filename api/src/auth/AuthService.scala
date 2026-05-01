@@ -36,6 +36,7 @@ trait AuthService:
   def login(username: String, password: String): IO[AuthError, LoginResponse]
   def verify(token: String): IO[AuthError, JwtClaims]
   def requireAdmin(token: String): IO[AuthError, JwtClaims]
+  def requireWriter(token: String): IO[AuthError, JwtClaims]
   def changePassword(username: String, current: String, next: String): IO[AuthError, Unit]
   def hashPassword(password: String): UIO[String]
 
@@ -94,6 +95,12 @@ class AuthServiceLive(
   def requireAdmin(token: String): IO[AuthError, JwtClaims] =
     verify(token).flatMap { claims =>
       if claims.role == "admin" then ZIO.succeed(claims)
+      else ZIO.fail(AuthError.Forbidden)
+    }
+
+  def requireWriter(token: String): IO[AuthError, JwtClaims] =
+    verify(token).flatMap { claims =>
+      if claims.role == "admin" || claims.role == "adult" then ZIO.succeed(claims)
       else ZIO.fail(AuthError.Forbidden)
     }
 
