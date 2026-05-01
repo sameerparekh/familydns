@@ -5,7 +5,7 @@ CREATE TABLE users (
   id            BIGSERIAL PRIMARY KEY,
   username      TEXT NOT NULL UNIQUE,
   password_hash TEXT NOT NULL,
-  role          TEXT NOT NULL DEFAULT 'readonly',
+  role          TEXT NOT NULL DEFAULT 'child' CHECK (role IN ('admin','adult','child')),
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -129,3 +129,15 @@ FROM profiles WHERE name = 'Kids';
 -- Seed default admin (password: changeme — must be changed on first login)
 INSERT INTO users (username, password_hash, role) VALUES
   ('admin', '$2a$12$ldVwQxE6A.5oyXaMiu3bvuACgvwnN8wgDL5FAZ8s.81Yp9w0HHZ6.', 'admin');
+
+-- Many-to-many: which profiles each user can see / manage
+CREATE TABLE user_profiles (
+  user_id    BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  profile_id BIGINT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  PRIMARY KEY (user_id, profile_id)
+);
+CREATE INDEX idx_user_profiles_profile ON user_profiles(profile_id);
+
+-- Link the seeded admin to all seeded profiles
+INSERT INTO user_profiles (user_id, profile_id)
+SELECT u.id, p.id FROM users u CROSS JOIN profiles p WHERE u.username = 'admin';

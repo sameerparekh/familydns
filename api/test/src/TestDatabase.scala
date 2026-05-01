@@ -79,8 +79,8 @@ object TestDatabase:
 
   /** All repo types bundled for convenience */
   type AllRepos =
-    UserRepo & ProfileRepo & ScheduleRepo & TimeLimitRepo & SiteTimeLimitRepo & DeviceRepo &
-      BlocklistRepo & TimeUsageRepo & TimeExtensionRepo & QueryLogRepo
+    UserRepo & UserProfileRepo & ProfileRepo & ScheduleRepo & TimeLimitRepo & SiteTimeLimitRepo &
+      DeviceRepo & BlocklistRepo & TimeUsageRepo & TimeExtensionRepo & QueryLogRepo
 
   val layer: ZLayer[Any, Throwable, EmbeddedPostgres & Transactor[Task] & AllRepos] =
     val pg = embeddedPg
