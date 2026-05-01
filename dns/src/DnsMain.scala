@@ -112,10 +112,10 @@ object DnsMain extends ZIOAppDefault:
     for
       cfg <- ZIO.service[AppConfig]
       dnsCfg = toDnsConfig(cfg.dns)
-      _          <- ZIO.logInfo(s"FamilyDNS DNS starting on :${dnsCfg.port} (location=${dnsCfg.location})")
-      cacheRef   <- Ref.make(DnsCache.empty)
-      usageRef   <- Ref.make(TimeUsageSnapshot.empty)
-      logQueue    = new ConcurrentLinkedQueue[QueryLogEntry]()
+      _ <- ZIO.logInfo(s"FamilyDNS DNS starting on :${dnsCfg.port} (location=${dnsCfg.location})")
+      cacheRef <- Ref.make(DnsCache.empty)
+      usageRef <- Ref.make(TimeUsageSnapshot.empty)
+      logQueue = new ConcurrentLinkedQueue[QueryLogEntry]()
       _          <- loadCache
         .flatMap(cacheRef.set)
         .catchAllCause(c => ZIO.logErrorCause("initial cache load failed", c))
