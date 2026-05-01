@@ -118,7 +118,9 @@ mill __.fix
 
 ## Database migrations
 
-Migrations live in `api/src/db/migrations/` as `V{n}__{description}.sql`. They run automatically on API startup via Flyway. Never edit existing migrations — always add a new one.
+Migrations live in `api/resources/db/migration/` as `V{n}__{description}.sql`. They run automatically on API startup via Flyway. Never edit existing migrations — always add a new one.
+
+Test infra reads `V1__init.sql` directly from the test classpath, so when adding a migration also keep `api/test/resources/V1__init.sql` and `dns/test/resources/V1__init.sql` in sync.
 
 ## Adding a new API route
 
