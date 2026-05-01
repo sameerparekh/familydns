@@ -87,9 +87,6 @@ object api extends CommonModule {
     Assembly.Rule.Append("META-INF/services/org.flywaydb.core.extensibility.Plugin", "\n"),
     Assembly.Rule.Append("META-INF/services/java.sql.Driver", "\n"),
   )
-  override def resources: T[Seq[PathRef]] = Task {
-    super.resources() ++ Seq(PathRef(os.pwd / "api" / "src" / "db" / "migrations"))
-  }
   object test extends ScalaTests with FamilyDnsTestModule {
     def moduleDeps = super.moduleDeps ++ Seq(api)
     def mvnDeps = super.mvnDeps() ++ Seq(

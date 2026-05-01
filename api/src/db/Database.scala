@@ -30,7 +30,7 @@ object Database:
           cfg.user,
           cfg.password,
         )
-        .locations("classpath:db/migration", "filesystem:api/src/db/migrations")
+        .locations("classpath:db/migration")
         .baselineOnMigrate(true)
         .load()
         .migrate()
