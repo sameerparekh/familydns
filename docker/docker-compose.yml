@@ -70,3 +70,29 @@ services:
       FAMILYDNS_DNS_LOCATION: "staging"
     ports:
       - "127.0.0.1:5354:5354/udp"
+
+  traffic:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      FAMILYDNS_MODE: traffic
+      FAMILYDNS_DB_HOST: postgres
+      FAMILYDNS_DB_PORT: "5432"
+      FAMILYDNS_DB_NAME: familydns
+      FAMILYDNS_DB_USER: familydns
+      FAMILYDNS_DB_PASSWORD: familydns
+      FAMILYDNS_JWT_SECRET: "staging-jwt-secret-do-not-use-in-prod-32ch"
+      # eth0 inside the bridge — only sees this container's own packets, which
+      # is enough to verify the service starts up. Real per-device capture
+      # happens on the host via systemd (see deploy/familydns-traffic.service).
+      FAMILYDNS_TRAFFIC_INTERFACE: "eth0"
+      FAMILYDNS_TRAFFIC_FLUSH_INTERVAL: "5"
+      FAMILYDNS_TRAFFIC_SESSION_TIMEOUT: "10"
+      FAMILYDNS_TRAFFIC_LOCATION: "staging"
+    cap_add:
+      - NET_RAW
+      - NET_ADMIN
