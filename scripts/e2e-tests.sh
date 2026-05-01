@@ -74,9 +74,9 @@ step "Blocklists endpoint"
 curl -fsS "${AUTH[@]}" "$BASE/api/blocklists" >/dev/null
 pass "blocklists OK"
 
-step "DNS server responds on UDP :5353"
+step "DNS server responds on UDP :5354"
 DNS_HOST="${E2E_DNS_HOST:-127.0.0.1}"
-DNS_PORT="${E2E_DNS_PORT:-5353}"
+DNS_PORT="${E2E_DNS_PORT:-5354}"
 if ! command -v dig >/dev/null 2>&1; then
   fail "dig not installed — install dnsutils/bind-tools"
 fi
