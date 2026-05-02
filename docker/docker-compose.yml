@@ -21,7 +21,9 @@ services:
       timeout: 2s
       retries: 30
     ports:
-      - "5433:5432"
+      # Bind to loopback only — postgres must never be reachable from the LAN.
+      # The dns container uses host networking and reaches it via 127.0.0.1.
+      - "127.0.0.1:5433:5432"
 
   api:
     build:
