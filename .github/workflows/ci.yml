@@ -92,6 +92,35 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: bash .github/scripts/check-migrations.sh "$BASE_SHA"
 
+  # ── Shell test discovery ─────────────────────────────────────────────────
+  # Auto-discovers and runs every *.test.sh in the repo. Add a new test by
+  # dropping a *.test.sh file alongside the script/hook it covers — no CI
+  # change needed. (web/, node_modules, build outputs are excluded.)
+  shell-tests:
+    name: Shell Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Discover and run *.test.sh
+        run: |
+          set -euo pipefail
+          mapfile -d '' tests < <(
+            find . \
+              \( -path ./node_modules -o -path ./web -o -path ./out -o -path ./.git \) -prune \
+              -o -type f -name '*.test.sh' -print0
+          )
+          if [[ ${#tests[@]} -eq 0 ]]; then
+            echo "No *.test.sh files found." ; exit 0
+          fi
+          fail=0
+          for t in "${tests[@]}"; do
+            echo "::group::$t"
+            if ! bash "$t"; then fail=1; fi
+            echo "::endgroup::"
+          done
+          exit $fail
+
   # ── Frontend: type-check, lint, build ────────────────────────────────────
   frontend:
     name: Frontend Build & Lint

@@ -122,6 +122,12 @@ Migrations live in `api/resources/db/migration/` as `V{n}__{description}.sql`. T
 
 Tests run the same Flyway migrations from `classpath:db/migration` against the embedded Postgres in `TestDatabase`, so there is one source of truth — never maintain a parallel test schema. To change the schema, add a new `V{n}__...sql` migration; do not edit `V1__init.sql` (or any other already-applied migration).
 
+## Branch-diff checks (CI + pre-push)
+
+CI checks and pre-push checks that compare a branch against `main` MUST diff against the **merge base** with `origin/main`, not `origin/main` directly. Use three-dot syntax (`origin/main...HEAD`) or an explicit `git merge-base origin/main HEAD`. Two-dot (`origin/main..HEAD`) over-reports when `main` has advanced since the branch diverged, producing spurious failures and noise.
+
+Pre-commit checks are different: they operate on staged files (`git diff --cached`), not against `origin/main`.
+
 ## Adding a new API route
 
 1. Add request/response types to `shared/src/Models.scala`
