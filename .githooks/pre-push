@@ -35,6 +35,21 @@ else
   echo "pre-push: web/node_modules missing — skipping web checks" >&2
 fi
 
+# ── DB migrations immutability (mirrors CI from #61, #77) ────────────────
+# check-migrations.sh uses `git diff BASE...HEAD` (three-dot = merge-base).
+current_branch="$(git symbolic-ref --short HEAD 2>/dev/null || echo "")"
+if [[ "${current_branch}" == "main" ]]; then
+  : # pushing main itself — nothing to check
+elif ! git rev-parse --verify --quiet origin/main >/dev/null; then
+  echo "pre-push: origin/main not fetched — skipping migration check (run 'git fetch origin main' to enable)" >&2
+else
+  echo "pre-push: check-migrations.sh origin/main"
+  if ! .github/scripts/check-migrations.sh origin/main; then
+    echo "pre-push: migration immutability check failed (see #61, #78). Bypass with --no-verify if you must." >&2
+    fail=1
+  fi
+fi
+
 end=$(date +%s)
 echo "pre-push: $((end - start))s"
 exit $fail
