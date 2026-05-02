@@ -77,6 +77,21 @@ jobs:
           mill api.test
           mill dns.test
 
+  # ── Migrations: forbid changes to existing files on PRs to main ─────────
+  migrations-immutable:
+    name: Migrations Immutability Check
+    if: github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Reject changes to existing migration files
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: bash .github/scripts/check-migrations.sh "$BASE_SHA"
+
   # ── Frontend: type-check, lint, build ────────────────────────────────────
   frontend:
     name: Frontend Build & Lint
