@@ -90,6 +90,19 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: bash .github/scripts/check-migrations.sh "$BASE_SHA"
 
+  # ── Hook & script tests ──────────────────────────────────────────────────
+  hook-tests:
+    name: Hook & Script Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: check-migrations.sh tests
+        run: bash .github/scripts/check-migrations.test.sh
+
+      - name: pre-push migration-section tests
+        run: bash .githooks/pre-push.test.sh
+
   # ── Frontend: type-check, lint, build ────────────────────────────────────
   frontend:
     name: Frontend Build & Lint
