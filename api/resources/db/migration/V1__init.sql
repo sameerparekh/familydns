@@ -6,6 +6,7 @@ CREATE TABLE users (
   username      TEXT NOT NULL UNIQUE,
   password_hash TEXT NOT NULL,
   role          TEXT NOT NULL DEFAULT 'child' CHECK (role IN ('admin','adult','child')),
+  new column    TEXT,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
