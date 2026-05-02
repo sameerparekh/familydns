@@ -5,6 +5,12 @@ sites, set per-profile schedules ("no internet after 9pm"), enforce daily and
 per-site time limits, log queries, and grant temporary extensions — all on
 your own hardware, no third-party DNS provider.
 
+> **Architecture in flux.** Enforcement is moving from a host-based DNS +
+> pcap setup to an OpenWRT router that pulls policy from this API and
+> reports usage back. See [`docs/architecture-openwrt.md`](docs/architecture-openwrt.md)
+> for the target design and tracking issues #66 – #73. The diagram below
+> describes what's currently committed; it will change as those issues land.
+
 ```
                  +------------------+
 DNS query ─────▶ |   familydns-dns  | ─▶ category lists, schedules, time limits
