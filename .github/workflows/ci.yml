@@ -1,10 +1,12 @@
 name: CI
 
 on:
-  push:
-    branches: [main, develop, "claude/**"]
   pull_request:
     # Run on PRs targeting any branch
+  push:
+    # Only run on main post-merge — feature/claude branches get coverage via
+    # the PR's pull_request trigger. Avoids double-runs (issue #53).
+    branches: [main]
   workflow_dispatch:
 
 env:
