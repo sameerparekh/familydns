@@ -100,3 +100,24 @@ hosts:
   # confirmation it belongs to the same company as higgsfield.ai (search
   # results conflated the two). See evidence/multi-category-classification-2742.md.
   - higgsfield.ai
+  #
+  # traffic-driven additions (#2759): 30-day prod recent-apexes sweep across
+  # all 28 devices, 2026-09-08. delphi.ai is a consumer-facing AI-persona
+  # platform ("Delphi: Create Your Digital Mind") — users converse with a
+  # personalized AI persona via text/voice/video, integrated across
+  # website/WhatsApp/Slack/Zoom; squarely a consumer companion/chatbot
+  # product. deepai.org is a free, no-account-required consumer AI product
+  # (chat, image/video/music generation) — "a generalist consumer tool
+  # rather than a specialist business platform" per its own positioning.
+  # Both distinct from this pass's B2B/dual-use holds: kapa.ai (an
+  # embedded technical-documentation AI assistant used by OpenAI/Docker/
+  # Mapbox on their own docs sites — same "professional tooling embedded
+  # on unrelated sites" class as ivy.ai/forethought.ai/kapa.ai's sibling
+  # domains, out of scope), and claude.com/flux.ai/navless.ai/ivy.ai/
+  # trinitymedia.ai/forethought.ai/castify.ai (all standing exclusions,
+  # re-confirmed, no new evidence to reverse). dxtech.ai/higgs.ai/
+  # theagenticx.ai remain held out unverified (low hit counts, no
+  # confirmed identity, carried forward again). See
+  # evidence/multi-category-classification-2759.md.
+  - delphi.ai
+  - deepai.org

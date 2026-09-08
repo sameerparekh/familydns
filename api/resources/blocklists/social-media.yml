@@ -76,3 +76,11 @@ hosts:
   # unauthoritative forum answer isn't enough to reverse a repeatedly
   # re-investigated verdict. See evidence/multi-category-classification-2756.md.
   - truthsocial.com # Truth Social consumer social network
+  #
+  # traffic-driven addition (#2759): 30-day prod recent-apexes sweep across
+  # all 28 devices, 2026-09-08. whatsapp.com is WhatsApp's own bare apex —
+  # #2599 added whatsapp.net (the messaging/media protocol domain) and
+  # explicitly noted whatsapp.com wasn't observed in traffic that pass so
+  # wasn't added; it appeared this run (450KB / 26 hits), so adding it now
+  # per that pass's own guidance. See evidence/multi-category-classification-2759.md.
+  - whatsapp.com # WhatsApp's bare apex, sibling of the already-curated whatsapp.net

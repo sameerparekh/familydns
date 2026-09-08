@@ -624,3 +624,59 @@ hosts:
   - osdrtb.net
   - displayio.cloud
   - playwire.com
+  #
+  # traffic-driven additions (#2759): observed but unblocked ads infra,
+  # 30-day prod recent-apexes sweep across all 28 devices, 2026-09-08.
+  # adspostx.com (AdsPostX, a retail-media post-transaction ad network),
+  # progrtblive.com (self-descriptive "programmatic RTB live" name shape —
+  # same reasoning as gamaibids.com/osdrtb.net, no company page found but
+  # absent from ads-extended entirely so a genuine gap either way),
+  # tradplusad.com (TradPlus — Chinese mobile ad-mediation SDK, 40+ ad
+  # networks integrated, 50B+ daily ad requests), connectad.io (ConnectAd —
+  # independent European SSP), ethicalads.io (EthicalAds — privacy-focused
+  # ad network for developer sites, e.g. Flask/ESLint/daily.dev docs; still
+  # ad-serving infra regardless of its "ethical" framing), microad.jp
+  # (MicroAd — established Japanese DSP/SSP, founded 2007), exelbid.com
+  # (ExelBid — Korea's #1 mobile ad exchange, OpenRTB-based), bidence.net
+  # (Bidence — OpenRTB ad exchange, est. 2016), mathads.com (confirmed via
+  # two independent sources as a MediaMath apex — same company as the
+  # well-known mathtag.com ad-tag domain), bids.ws (programmatic ad system
+  # with sellers.json entries), tvpixel.com (Nielsen/D+M TV ad-tracking
+  # pixel), ladsp.com (F@N Communications' ad tracking/personalization
+  # domain — Japanese ad-tech, heavy third-party cookie usage), gsspat.jp
+  # (Geniee's ad-delivery domain — Geniee is the same company behind the
+  # already-curated adpushup.com, #2756), mediayo.ai (MediaYo — AI-driven
+  # programmatic ad-tech / DCO company; a ".ai"-TLD ad-tech company, same
+  # trap class as trygravity.ai/koah.ai/programmaticx.ai — belongs in
+  # ads.yml, not ai.yml), paa-reporting-advertising.amazon (Amazon's own
+  # ad-reporting/pixel infrastructure for Amazon Ads — distinct from the
+  # bdtelemetry.amazon first-party-telemetry skip; this one is literally
+  # Amazon Ads' reporting pixel), epicgameshubham.com (a scam/phishing
+  # domain impersonating Epic Games — 25/100 trust score, blacklisted,
+  # tracked in AdGuard's filter lists as adware/malvertising; confirmed NOT
+  # affiliated with the real Epic Games so no collateral risk, same
+  # "malvertising flag doesn't disqualify" reasoning as gamaibids.com,
+  # #2122). connectad.io/microad.jp/mathads.com/tvpixel.com/ladsp.com/
+  # gsspat.jp/paa-reporting-advertising.amazon all corroborated by presence
+  # of a subdomain in the StevenBlack ads-extended feed (the curated apex
+  # entry is still the stronger block per the #2122 precedent);
+  # adspostx.com/progrtblive.com/tradplusad.com/ethicalads.io/exelbid.com/
+  # bidence.net/bids.ws/mediayo.ai/epicgameshubham.com are absent from the
+  # feed entirely (highest-value gaps). See
+  # evidence/multi-category-classification-2759.md.
+  - adspostx.com
+  - progrtblive.com
+  - tradplusad.com
+  - connectad.io
+  - ethicalads.io
+  - microad.jp
+  - exelbid.com
+  - bidence.net
+  - mathads.com
+  - bids.ws
+  - tvpixel.com
+  - ladsp.com
+  - gsspat.jp
+  - mediayo.ai
+  - paa-reporting-advertising.amazon
+  - epicgameshubham.com

@@ -203,6 +203,53 @@ that edit in the same PR.** If a step above is now wrong, fix the step too.
 
 ## Learnings log (newest first)
 
+- **2026-09-08** (#2759) — **A `.ai`-TLD company whose actual product is AI-
+  driven programmatic ad delivery (Dynamic Creative Optimization) is a third
+  confirmed instance of the `axon.ai`/`programmaticx.ai`/`trygravity.ai`/
+  `koah.ai` trap — check `ads.yml` criteria before defaulting to `ai.yml` on
+  TLD alone.** `mediayo.ai` ("MediaYo — AI-driven programmatic advertising")
+  surfaced in the `ai.yml` `.ai`-TLD sweep but its entire business is
+  AI-optimized ad creative delivery — an ads.yml candidate. This pattern is
+  now common enough (4 instances across 3 passes) that it's worth checking
+  first for ANY `.ai` apex whose own marketing centers on "advertising",
+  "ad network", "programmatic", or "DCO" — the TLD is never the signal, the
+  product description is.
+- **2026-09-08** (#2759) — **A confirmed scam/phishing domain that
+  impersonates a well-known game brand (blacklisted, tracked in AdGuard's
+  filter lists as adware) is an `ads.yml` malvertising add, not a
+  `games.yml` candidate — even though it matches the games keyword sweep on
+  the brand name.** `epicgameshubham.com` matched the "Epic Games" substring
+  in the games sweep but a trust-score/blacklist check confirmed it is NOT
+  affiliated with the real Epic Games — a scam clone site. Since it's
+  confirmed illegitimate (no collateral risk) and independently tracked as
+  adware/malvertising, it belongs with the `gamaibids.com`-class
+  "malvertising flag doesn't disqualify — still ad-category" reasoning
+  (#2122), filed in `ads.yml`, not held out and not filed under the brand's
+  actual category.
+- **2026-09-08** (#2759) — **A first-party analytics SDK a category's own
+  content creators embed in their own products (game-dev analytics, not
+  third-party ad infra riding on top) belongs in the same dual-use skip
+  bucket as `app-measurement.com`/Firebase — check who integrates the SDK
+  before assuming "analytics substring in a `games`-adjacent apex = ad
+  infra."** `gameanalytics.com` is a legitimate SDK game *developers*
+  embed in their own titles to understand their own players; blocking it
+  doesn't stop ads, it silently breaks developer telemetry inside
+  otherwise-fine games. Held out as dual-use, not added to any category.
+- **2026-09-08** (#2759) — **Cross-check a self-descriptive-name-only
+  candidate (no confirmed company page) against the StevenBlack
+  `ads-extended` feed before deciding whether to add it — apex-absent from
+  the feed is itself corroborating signal that it's a genuine, previously
+  unknown gap, not proof it's illegitimate.** `progrtblive.com` had no
+  public company page (same shape as `osdrtb.net`/`gamaibids.com` in prior
+  passes) but is also completely absent from `ads-extended`, meaning no
+  other curated source has flagged it either way — consistent with "small
+  new RTB shop," not disqualifying. Contrast with `mathads.com`, where a
+  *conflicting* identity signal (search results partly describing the
+  unrelated `math-aids.com` worksheets site) was resolved by finding TWO
+  independent sources confirming MediaMath ownership (the `creative.
+  mathads.com` subdomain shape + a direct mathtag.com/MediaMath ownership
+  search) before adding — a single ambiguous source is not enough, but two
+  independent confirmations of the same specific claim is.
 - **2026-09-01** (#2756) — **Check every candidate's history against
   `evidence/*.md`, not just the current `.yml` content, BEFORE running a
   fresh identity search — a domain can be a documented standing exclusion
