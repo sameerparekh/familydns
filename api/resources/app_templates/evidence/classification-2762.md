@@ -89,11 +89,12 @@ or ad surface:
 
 `ssl-images-amazon.com`: `images-na`, `images-eu`.
 
-`media-amazon.com`, per device. `c` is the reason this apex is listed by
-subdomain: it is attributed directly, as its own name, on Sameer iPhone and
-Prima iPad. (Its absence elsewhere proves nothing either way — `subdomains[]`
-can't distinguish "never queried `c.`" from "the #1344 fold-back absorbed
-it".)
+`media-amazon.com`, per device. `metrics` is what forces this apex to be listed
+by subdomain rather than as an apex — it is telemetry, and the template carries
+only storefront imagery. `c` is then listed alongside `m` on its own evidence:
+it is attributed directly, as its own name, on Sameer iPhone and Prima iPad.
+(Its absence on the other six proves nothing either way — `subdomains[]` can't
+distinguish "never queried `c.`" from "the #1344 fold-back absorbed it".)
 
 | device | subdomains |
 | --- | --- |
