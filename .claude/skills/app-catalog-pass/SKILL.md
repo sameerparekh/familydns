@@ -172,6 +172,66 @@ above is now wrong, fix the step too — don't just log around it.
 
 ## Learnings log (newest first)
 
+- **2026-09-10 (#2762)** — An operator-named pass ("create apps for amazon
+  and sportys") still runs Step 0, just inverted: the traffic pull is no longer
+  for *finding* candidates but for *scoping* the ones you were handed, and it
+  is what turns a guess into a host-set. Here it produced the catalog's
+  strongest apex-exclusion argument to date — every host that made the case
+  against a bare `amazon.com` entry (`aws.amazon.com`, `api.amazon.com`,
+  `read`/`music`/`watch`/`apay-us`/`pharmacy`) was in this household's own 30d
+  traffic, not a hypothetical from web research. **Don't skip the traffic pull
+  because the operator already named the brand.**
+- **2026-09-10 (#2762)** — Two apexes of the same brand can take OPPOSITE
+  apex-vs-subdomain calls in one template, and the contrast is worth stating
+  inline: `ssl-images-amazon.com` is listed as a bare apex (single-purpose
+  static-image zone, every child is storefront imagery by construction) while
+  `media-amazon.com` is not (its `metrics.` child is telemetry). The test isn't
+  "apex or subdomain" as a house style; it's **how single-purpose the zone is**,
+  which you can only answer by enumerating its observed children. **Rest that
+  call on what the children ARE, never on an IP-pool-disjointness claim** — the
+  first draft of this pass justified the `metrics.` exclusion as "a Fastly pool
+  no kept host touches" and the independent review disproved it with one `dig`,
+  because the kept hosts are DNS-steered across CDNs (Fastly included). A
+  disjointness claim over CDN-fronted hosts is close to unfalsifiable; don't
+  make one.
+- **2026-09-10 (#2762)** — A brand's per-device subdomain split can be the
+  whole classification: Sporty's showed 2.04 GB / 365 hits on Kid Laptop with
+  `stream.videos`/`dl.videos`/`ye.courses` and NO `www` — pure course video from
+  Sporty's Online Training, zero store browsing — while the adult device hit all
+  five hosts including the shop. Per-apex bytes alone would have read this as
+  ambiguous shop-or-courses traffic. **`recent-apexes` gives no per-subdomain
+  byte split, so when a brand has both a kid surface and a parent-purchasing
+  surface, diff the `subdomains[]` lists ACROSS devices** — the device that
+  lacks the store host tells you what the kid actually uses.
+- **2026-09-10 (#2762)** — A `dig` snapshot of a CDN-fronted host is a SAMPLE,
+  not the host's IP set, and this pass got caught assuming otherwise twice.
+  Amazon's `images-na`/`images-eu.ssl-images-amazon.com` and `m.media-amazon.com`
+  were seen resolving through `c.media-amazon.com` to CloudFront in one minute
+  and through Akamai (23.215.223.x) in another. So: resolve the whole chain
+  (`dig +short` prints it), repeat it, and **never justify keeping or excluding
+  a host with a claim about which pools it does or doesn't share** — describe
+  the steering and rest the decision on what the host IS (app content vs
+  telemetry vs shared vendor API), which doesn't move between lookups.
+  Corollary, and get this one right: a host observed as a DIRECTLY-QUERIED name
+  is worth its own entry — but NOT because "a CNAME target earns no
+  attribution." That is false. #1344/#1346 fold a re-queried CNAME target back
+  onto its branded chain head, and `each_candidate_host` walks that recovered
+  head alongside the answered name
+  (`openwrt/files/usr/lib/lua/wifihaven/dns_tail_sets.lua`). The real reason is
+  that the alias edge is TTL-bounded (`resolve_head`) and capped at
+  `max_aliases` with oldest-LEARNED eviction (`evict_oldest_alias`, which
+  drops the lowest `seq` and is not refreshed on read) — both in
+  `dns_log.lua` — so the fold-back is best-effort and an explicit entry is
+  the reliable version. Two drafts of this pass asserted a mechanism instead of
+  reading the agent code; **go read the Lua before writing "how attribution
+  works" into a template comment.**
+- **2026-09-10 (#2762)** — The prod traffic pull can be refused by the Claude
+  Code permission classifier: the block lands on READING the credential
+  (`prod_api_admin_password.md`), not on the API call — a plain
+  `curl https://api.wifihaven.net/api/health` succeeds while the login command
+  is denied. Splitting the read from the POST doesn't help. Say so and ask the
+  operator rather than reshaping the command to slip past it; the fix is on
+  their side (auto-mode setting or a Bash permission rule).
 - **2026-08-31 (#2754)** — A brand-new template can ship with its own
   host-set gap: `arduino.yml` merged this same week (#2753) missing
   `login.arduino.cc` — the sign-in host every already-kept Arduino Cloud page
