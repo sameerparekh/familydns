@@ -87,7 +87,18 @@ or ad surface:
 
 ### `ssl-images-amazon.com` / `media-amazon.com`
 
-`images-na`, `images-eu` / `m`, `c`, `metrics`.
+`ssl-images-amazon.com`: `images-na`, `images-eu`.
+
+`media-amazon.com`, per device — `c` is NOT universal, which is what justifies
+listing it explicitly:
+
+| device | subdomains |
+| --- | --- |
+| Sameer iPhone | `m`, `c`, `metrics` |
+| Prima iPad | `m`, `c` |
+| Rachel iPhone | `m`, `metrics` |
+| Rachel Mac | `m`, `metrics` |
+| Kid Laptop, Quintus iPad, Octavius iPad, Sameer Mac | `m` |
 
 ## Host-set decisions (Step 3)
 
@@ -105,18 +116,30 @@ Three subdomain entries suffix-match all five observed hosts via
 | `ye.courses.sportys.com` | CNAME `prod-ye-training.simplysporty.net` → 16.59.159.202, 3.23.25.151 |
 | `pspdfkit.courses.sportys.com` | CNAME `prod-pspdfkit.simplysporty.net` → 77.112.172.80, 77.112.39.76 (whois `AMAZO-4`) |
 
-What the whois establishes is narrower than "CDN edge": every one sits in a
-large provider's shared address space — 199.232.66.132 is `SKYCA-3` / Fastly,
-and the rest are Amazon `AT-88-Z`/`AMAZO-4`, which covers both CloudFront edges
-and generic AWS compute (`ye.courses` terminates on 3.23.25.151 and
-`courses.sportys.com` on 3.151.66.199, both AWS compute rather than a CDN edge).
-Shared provider space is what `_README.yml`'s Class 2 is about. Nothing
-establishes 199.232.66.132 as Sporty's alone; Fastly anycast addresses are
-shared across customers by design.
+A whois org name can't separate a CloudFront edge from generic AWS compute —
+`AT-88-Z`/`AMAZO-4` covers both — so the classification comes from AWS's
+published `https://ip-ranges.amazonaws.com/ip-ranges.json` (`service` field):
+
+| host | address | service |
+| --- | --- | --- |
+| `www.sportys.com` | 199.232.66.132 | Fastly (whois `SKYCA-3`) |
+| `stream.videos.sportys.com` | 99.84.105.16 | `CLOUDFRONT` 99.84.0.0/16 |
+| `dl.videos.sportys.com` | 18.238.176.58 | `CLOUDFRONT` 18.238.0.0/15 |
+| `courses.sportys.com` | 3.151.66.199, 16.59.107.150 | `EC2` us-east-2 |
+| `ye.courses.sportys.com` | 3.23.25.151, 16.59.159.202 | `EC2` us-east-2 |
+| `pspdfkit.courses.sportys.com` | 77.112.172.80 | `EC2` us-east-2 |
+
+So three of the six are EC2 origins rather than CDN edges, which is consistent
+with the dedicated `prod-<service>.simplysporty.net` origin per training
+surface. What matters for Class 2 is the shared part: every address sits in a
+large provider's shared space. Nothing establishes 199.232.66.132 as Sporty's
+alone; Fastly anycast addresses are shared across customers by design.
 
 Class-2 overlap check, which `_README.yml` asks for rather than assuming:
 `stream.videos.sportys.com` (99.84.105.{16,38,60,119}) and `aws.amazon.com`
-(99.84.105.{36,65,73,118}) sit in the SAME CloudFront /24 — and `amazon.yml`
+(99.84.105.{36,65,73,118}) were OBSERVED in the SAME CloudFront /24 — stated as
+observed because `stream.videos` also answered 3.161.225.x (another CloudFront
+range) in one lookup, so its address set moves — and `amazon.yml`
 excludes the bare `amazon.com` apex precisely so the AWS console is never
 collaterally dropped. The addresses are distinct today and only resolved IPs
 enter an `eb_` set, so blocking Sporty's drops no AWS-console address. Recorded
@@ -158,16 +181,17 @@ that is NOT the basis for the exclusion and must not be restated as "a pool no
 kept host touches": the kept image hosts are DNS-steered across CDNs, Fastly
 included, so pool-disjointness here is unverified.
 
-`c.media-amazon.com` is kept because real traffic on Kid Laptop is attributed to
-`c.` directly, as its own name. Two rationales were tried and are both wrong,
+`c.media-amazon.com` is kept because it is attributed directly, as its own name,
+on Sameer iPhone and Prima iPad (see the per-device table above). Two rationales were tried and are both wrong,
 recorded so they don't get re-derived: it is NOT "adds no incremental IPs"
 (that holds only in the steering state where `m.` resolves through `c.`), and it
 is NOT "a CNAME target earns no attribution" — #1344/#1346 fold a re-queried
 CNAME target back onto its branded chain head, and `each_candidate_host` walks
 that recovered head alongside the answered name
 (`openwrt/files/usr/lib/lua/wifihaven/dns_tail_sets.lua`). What makes an explicit
-entry worth having is that the alias edge is TTL-bounded and LRU-evicted
-(`resolve_head`, `dns_log.lua`), so the fold-back is best-effort.
+entry worth having is that the alias edge is TTL-bounded (`resolve_head`) and
+capped with oldest-learned eviction (`evict_oldest_alias`), both in
+`dns_log.lua`, so the fold-back is best-effort.
 
 Amazon steers the image hosts between CDNs by DNS: `m.media-amazon.com` answered
 on Akamai (23.215.223.x via `a.media-amazon.com.akamaized.net`) and, minutes

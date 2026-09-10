@@ -63,18 +63,21 @@ icon_type: url
 # `media-amazon.com` is NOT listed as an apex, because one of its three
 # observed children is telemetry:
 #   m.media-amazon.com        storefront image/media CDN — kept
-#   c.media-amazon.com        kept because real traffic on Kid Laptop is
-#                              attributed to `c.` directly, as its own name.
+#   c.media-amazon.com        kept because it is attributed directly, as its
+#                              own name, on Sameer iPhone and Prima iPad (see
+#                              the per-device table in
+#                              evidence/classification-2762.md).
 #                              Do NOT justify this as "a CNAME target earns no
 #                              attribution" — that is false: #1344/#1346 fold a
 #                              re-queried CNAME target back onto its branded
 #                              chain head, and `each_candidate_host` walks that
 #                              recovered head as well as the answered name
 #                              (openwrt/.../dns_tail_sets.lua). The reason an
-#                              explicit entry is still worth having is that the
-#                              alias edge is TTL-bounded and LRU-evicted
-#                              (`resolve_head`, dns_log.lua), so the fold-back
-#                              is best-effort, not guaranteed.
+#                              explicit entry is still worth having is that
+#                              the alias edge is TTL-bounded (`resolve_head`)
+#                              and capped with oldest-learned eviction
+#                              (`evict_oldest_alias`), both in dns_log.lua, so
+#                              the fold-back is best-effort, not guaranteed.
 #   metrics.media-amazon.com  EXCLUDED: it is telemetry, and this template
 #                              carries only hosts whose bytes are storefront
 #                              imagery. Same call as excluding

@@ -28,10 +28,12 @@ icon_type: url
 #
 # The three kept entries suffix-match every one of the five observed hosts
 # (`HostMatch.matchesApex`, shared/src/types/HostMatch.scala). Where each one
-# resolved on 2026-09-10. What the whois establishes is narrower than "CDN
-# edge": every one sits in a large provider's shared address space (Fastly, or
-# Amazon `AT-88-Z`/`AMAZO-4` covering both CloudFront and generic AWS compute),
-# which is what _README.yml's Class 2 is about. See the Class-2 note below:
+# resolved on 2026-09-10. A whois org name can't tell a CloudFront edge from
+# generic AWS compute — `AT-88-Z`/`AMAZO-4` covers both — so the split below is
+# taken from AWS's published https://ip-ranges.amazonaws.com/ip-ranges.json
+# (`service` field), not inferred. Either way every host sits in a large
+# provider's SHARED address space, which is what _README.yml's Class 2 is
+# about. See the Class-2 note below:
 #   www.sportys.com                pilot shop; CNAME sportys.com ->
 #                                   199.232.66.132 (whois: SKYCA-3 / Fastly).
 #                                   Fastly anycast addresses are shared across
@@ -39,16 +41,23 @@ icon_type: url
 #                                   this one as Sporty's alone.
 #   videos.sportys.com             covers the two course-video hosts, which
 #                                   carry essentially all of the bytes above:
-#     stream.videos.sportys.com     streaming; CloudFront 99.84.105.x
-#     dl.videos.sportys.com         download; CloudFront 18.238.176.x
-#   courses.sportys.com            training portal (16.59.107.150 /
-#                                   3.151.66.199), and covers:
+#     stream.videos.sportys.com     streaming; 99.84.105.x (CLOUDFRONT,
+#                                    99.84.0.0/16)
+#     dl.videos.sportys.com         download; 18.238.176.x (CLOUDFRONT,
+#                                    18.238.0.0/15)
+#   courses.sportys.com            training portal; 16.59.107.150 /
+#                                   3.151.66.199 (EC2 us-east-2), and covers:
 #     ye.courses.sportys.com        CNAME prod-ye-training.simplysporty.net ->
-#                                   16.59.159.202 / 3.23.25.151
+#                                   16.59.159.202 / 3.23.25.151 (EC2 us-east-2)
 #     pspdfkit.courses.sportys.com  in-course PDF viewer; CNAME
 #                                   prod-pspdfkit.simplysporty.net ->
-#                                   77.112.172.80 / 77.112.39.76 (Amazon, whois
-#                                   AMAZO-4)
+#                                   77.112.172.80 / 77.112.39.76 — EC2
+#                                   us-east-2, NOT a CDN edge. (Note for a
+#                                   future author: the default whois client
+#                                   returns a misleading RIPE
+#                                   NON-RIPE-NCC-MANAGED placeholder for
+#                                   77.112.0.0/14; ARIN and ip-ranges.json both
+#                                   say Amazon.)
 #
 # `simplysporty.net` is Sporty's own brand-named domain, used here only as the
 # CNAME target for its training services, with a dedicated `prod-<service>`
