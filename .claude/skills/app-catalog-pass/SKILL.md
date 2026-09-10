@@ -219,9 +219,10 @@ above is now wrong, fix the step too — don't just log around it.
   head alongside the answered name
   (`openwrt/files/usr/lib/lua/wifihaven/dns_tail_sets.lua`). The real reason is
   that the alias edge is TTL-bounded (`resolve_head`) and capped at
-  `max_aliases` with oldest-LEARNED eviction (`evict_oldest_alias`, which drops
-  the lowest `seq` and is not refreshed on read) — both in `dns_log.lua` — so
-  the fold-back is best-effort and an explicit entry is the reliable version. Two drafts of this pass asserted a mechanism instead of
+  `max_aliases` with oldest-LEARNED eviction (`evict_oldest_alias`, which
+  drops the lowest `seq` and is not refreshed on read) — both in
+  `dns_log.lua` — so the fold-back is best-effort and an explicit entry is
+  the reliable version. Two drafts of this pass asserted a mechanism instead of
   reading the agent code; **go read the Lua before writing "how attribution
   works" into a template comment.**
 - **2026-09-10 (#2762)** — The prod traffic pull can be refused by the Claude

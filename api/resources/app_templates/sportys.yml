@@ -31,9 +31,11 @@ icon_type: url
 # resolved on 2026-09-10. A whois org name can't tell a CloudFront edge from
 # generic AWS compute — `AT-88-Z`/`AMAZO-4` covers both — so the split below is
 # taken from AWS's published https://ip-ranges.amazonaws.com/ip-ranges.json
-# (`service` field), not inferred. Either way every host sits in a large
-# provider's SHARED address space, which is what _README.yml's Class 2 is
-# about. See the Class-2 note below:
+# (`service` field), not inferred. The split matters: _README.yml scopes Class 2
+# to a "third-party cloud-CDN edge", so only the three CLOUDFRONT/Fastly hosts
+# are Class 2. The three EC2 origins fall OUTSIDE it — a dedicated origin per
+# training surface is the good case, not a latent risk. See the Class-2 note
+# below, which is scoped to those three:
 #   www.sportys.com                pilot shop; CNAME sportys.com ->
 #                                   199.232.66.132 (whois: SKYCA-3 / Fastly).
 #                                   Fastly anycast addresses are shared across
@@ -66,7 +68,8 @@ icon_type: url
 # listed directly: no traffic is attributed to it, only to the `*.sportys.com`
 # names clients actually resolve.
 #
-# The CloudFront and Fastly edges above are the accepted Class-2 latent risk
+# The CloudFront and Fastly edges above — `www`, `stream.videos`, `dl.videos`,
+# and only those three — are the accepted Class-2 latent risk
 # from _README.yml — branded per-app hosts that happen to sit on a multi-tenant
 # CDN. That IS where this app's bytes live, so stripping them would defeat both
 # the block and the time budget.

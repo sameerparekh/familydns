@@ -89,8 +89,11 @@ or ad surface:
 
 `ssl-images-amazon.com`: `images-na`, `images-eu`.
 
-`media-amazon.com`, per device — `c` is NOT universal, which is what justifies
-listing it explicitly:
+`media-amazon.com`, per device. `c` is the reason this apex is listed by
+subdomain: it is attributed directly, as its own name, on Sameer iPhone and
+Prima iPad. (Its absence elsewhere proves nothing either way — `subdomains[]`
+can't distinguish "never queried `c.`" from "the #1344 fold-back absorbed
+it".)
 
 | device | subdomains |
 | --- | --- |
@@ -129,10 +132,16 @@ published `https://ip-ranges.amazonaws.com/ip-ranges.json` (`service` field):
 | `ye.courses.sportys.com` | 3.23.25.151, 16.59.159.202 | `EC2` us-east-2 |
 | `pspdfkit.courses.sportys.com` | 77.112.172.80 | `EC2` us-east-2 |
 
-So three of the six are EC2 origins rather than CDN edges, which is consistent
-with the dedicated `prod-<service>.simplysporty.net` origin per training
-surface. What matters for Class 2 is the shared part: every address sits in a
-large provider's shared space. Nothing establishes 199.232.66.132 as Sporty's
+So three of the six are EC2 origins rather than CDN edges. Two of those three
+(`ye.courses`, `pspdfkit.courses`) sit behind the dedicated
+`prod-<service>.simplysporty.net` origins; `courses.sportys.com` resolves
+directly — self-hosted, but not on that naming pattern.
+
+That split decides Class 2 rather than being incidental to it. `_README.yml`
+scopes Class 2 to a "third-party cloud-CDN edge", so only `www` (Fastly) and
+the two `*.videos` hosts (CloudFront) are Class 2 here; the three EC2 origins
+fall outside it, and a dedicated origin per training surface is the good case
+rather than a latent risk. Nothing establishes 199.232.66.132 as Sporty's
 alone; Fastly anycast addresses are shared across customers by design.
 
 Class-2 overlap check, which `_README.yml` asks for rather than assuming:
@@ -181,8 +190,8 @@ that is NOT the basis for the exclusion and must not be restated as "a pool no
 kept host touches": the kept image hosts are DNS-steered across CDNs, Fastly
 included, so pool-disjointness here is unverified.
 
-`c.media-amazon.com` is kept because it is attributed directly, as its own name,
-on Sameer iPhone and Prima iPad (see the per-device table above). Two rationales were tried and are both wrong,
+`c.media-amazon.com` is kept because it is attributed directly, as its own
+name, on Sameer iPhone and Prima iPad (see the per-device table above). Two rationales were tried and are both wrong,
 recorded so they don't get re-derived: it is NOT "adds no incremental IPs"
 (that holds only in the steering state where `m.` resolves through `c.`), and it
 is NOT "a CNAME target earns no attribution" — #1344/#1346 fold a re-queried
