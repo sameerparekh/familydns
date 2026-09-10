@@ -172,6 +172,49 @@ above is now wrong, fix the step too — don't just log around it.
 
 ## Learnings log (newest first)
 
+- **2026-09-10 (#2762)** — An operator-named pass ("create apps for amazon
+  and sportys") still runs Step 0, just inverted: the traffic pull is no longer
+  for *finding* candidates but for *scoping* the ones you were handed, and it
+  is what turns a guess into a host-set. Here it produced the catalog's
+  strongest apex-exclusion argument to date — every host that made the case
+  against a bare `amazon.com` entry (`aws.amazon.com`, `api.amazon.com`,
+  `read`/`music`/`watch`/`apay-us`/`pharmacy`) was in this household's own 30d
+  traffic, not a hypothetical from web research. **Don't skip the traffic pull
+  because the operator already named the brand.**
+- **2026-09-10 (#2762)** — Two apexes of the same brand can take OPPOSITE
+  apex-vs-subdomain calls in one template, and the contrast is worth stating
+  inline: `ssl-images-amazon.com` is listed as a bare apex (single-purpose
+  static-image zone, every child is storefront imagery by construction) while
+  `media-amazon.com` is not (its `metrics.` child is telemetry, and it is the
+  only one of the three CNAMEing onto a Fastly pool — 199.232.65.51 — that no
+  kept host touches). The test isn't "apex or subdomain" as a house style; it's
+  **how single-purpose the zone is**, which you can only answer by enumerating
+  its observed children.
+- **2026-09-10 (#2762)** — A brand's per-device subdomain split can be the
+  whole classification: Sporty's showed 2.04 GB / 365 hits on Kid Laptop with
+  `stream.videos`/`dl.videos`/`ye.courses` and NO `www` — pure course video from
+  Sporty's Online Training, zero store browsing — while the adult device hit all
+  five hosts including the shop. Per-apex bytes alone would have read this as
+  ambiguous shop-or-courses traffic. **`recent-apexes` gives no per-subdomain
+  byte split, so when a brand has both a kid surface and a parent-purchasing
+  surface, diff the `subdomains[]` lists ACROSS devices** — the device that
+  lacks the store host tells you what the kid actually uses.
+- **2026-09-10 (#2762)** — Same-apex CNAME chains can collapse: Amazon's
+  `images-na`/`images-eu.ssl-images-amazon.com` and `m.media-amazon.com` all
+  CNAME to `c.media-amazon.com`, and Amazon steers that name between Akamai
+  (23.215.223.x) and CloudFront (13.226.249.165 / 99.84.98.145) by DNS within a
+  single session. So a `dig` snapshot of a CDN-fronted host is a sample, not a
+  fact — resolve the whole chain (`dig +short` prints it) before writing an IP
+  into a template comment, and prefer describing the steering over pinning one
+  pool.
+- **2026-09-10 (#2762)** — The prod traffic pull can be refused by the Claude
+  Code permission classifier: the block lands on READING the credential
+  (`prod_api_admin_password.md`), not on the API call — a plain
+  `curl https://api.wifihaven.net/api/health` succeeds while the login command
+  is denied. Splitting the read from the POST doesn't help. Say so and ask the
+  operator rather than reshaping the command to slip past it; the fix is on
+  their side (auto-mode setting or a Bash permission rule).
+
 - **2026-08-31 (#2754)** — A brand-new template can ship with its own
   host-set gap: `arduino.yml` merged this same week (#2753) missing
   `login.arduino.cc` — the sign-in host every already-kept Arduino Cloud page

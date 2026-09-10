@@ -171,6 +171,9 @@ object AppTemplatesSpec extends ZIOSpec[TestDatabase.AllRepos & EmbeddedPostgres
           // #2754: traffic-driven catalog pass
           "canva",
           "instructables",
+          // operator request: Amazon shopping + Sporty's pilot shop / online training
+          "amazon",
+          "sportys",
         )
         val slugs    = templates.map(_.slug.value).toSet
         assertTrue(slugs == expected) &&
