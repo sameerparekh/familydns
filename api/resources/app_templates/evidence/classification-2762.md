@@ -105,9 +105,14 @@ Three subdomain entries suffix-match all five observed hosts via
 | `ye.courses.sportys.com` | CNAME `prod-ye-training.simplysporty.net` → 16.59.159.202, 3.23.25.151 |
 | `pspdfkit.courses.sportys.com` | CNAME `prod-pspdfkit.simplysporty.net` → 77.112.172.80, 77.112.39.76 (whois `AMAZO-4`) |
 
-Every one of those is a multi-tenant CDN edge, not a dedicated origin.
-199.232.66.132 is `SKYCA-3` / Fastly, and Fastly anycast addresses are shared
-across customers by design — nothing establishes it as Sporty's alone.
+What the whois establishes is narrower than "CDN edge": every one sits in a
+large provider's shared address space — 199.232.66.132 is `SKYCA-3` / Fastly,
+and the rest are Amazon `AT-88-Z`/`AMAZO-4`, which covers both CloudFront edges
+and generic AWS compute (`ye.courses` terminates on 3.23.25.151 and
+`courses.sportys.com` on 3.151.66.199, both AWS compute rather than a CDN edge).
+Shared provider space is what `_README.yml`'s Class 2 is about. Nothing
+establishes 199.232.66.132 as Sporty's alone; Fastly anycast addresses are
+shared across customers by design.
 
 Class-2 overlap check, which `_README.yml` asks for rather than assuming:
 `stream.videos.sportys.com` (99.84.105.{16,38,60,119}) and `aws.amazon.com`
@@ -141,9 +146,9 @@ must not take out the AWS console, Login with Amazon, Alexa, Kindle or Amazon Pa
 
 `ssl-images-amazon.com` IS listed as an apex, deliberately in contrast: it is a
 single-purpose static-image zone, so every child is storefront imagery by
-construction. Both observed children CNAME to `m.media-amazon.com` →
-`c.media-amazon.com`, so the apex entry adds no IP exposure the template does not
-already accept.
+construction. That is the whole argument, deliberately not "adds no IP exposure"
+— the same unverifiable IP-set claim about DNS-steered hosts that the `metrics.`
+note above warns against.
 
 `media-amazon.com` is NOT listed as an apex, because `metrics.media-amazon.com`
 is telemetry and this template carries only hosts whose bytes are storefront
@@ -153,10 +158,16 @@ that is NOT the basis for the exclusion and must not be restated as "a pool no
 kept host touches": the kept image hosts are DNS-steered across CDNs, Fastly
 included, so pool-disjointness here is unverified.
 
-`c.media-amazon.com` is kept because it is observed as a directly-queried name,
-not merely as a CNAME target — it needs its own entry to be attributed at all.
-It is NOT justified as "adds no incremental IPs": that holds only in the
-steering state where `m.` resolves through `c.`.
+`c.media-amazon.com` is kept because real traffic on Kid Laptop is attributed to
+`c.` directly, as its own name. Two rationales were tried and are both wrong,
+recorded so they don't get re-derived: it is NOT "adds no incremental IPs"
+(that holds only in the steering state where `m.` resolves through `c.`), and it
+is NOT "a CNAME target earns no attribution" — #1344/#1346 fold a re-queried
+CNAME target back onto its branded chain head, and `each_candidate_host` walks
+that recovered head alongside the answered name
+(`openwrt/files/usr/lib/lua/wifihaven/dns_tail_sets.lua`). What makes an explicit
+entry worth having is that the alias edge is TTL-bounded and LRU-evicted
+(`resolve_head`, `dns_log.lua`), so the fold-back is best-effort.
 
 Amazon steers the image hosts between CDNs by DNS: `m.media-amazon.com` answered
 on Akamai (23.215.223.x via `a.media-amazon.com.akamaized.net`) and, minutes

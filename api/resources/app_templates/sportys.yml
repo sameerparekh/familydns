@@ -9,8 +9,8 @@ icon_type: url
 #
 # Heavy, sustained use: 2.04 GB / 365 hits over a 30d window on Kid Laptop
 # alone, plus 23.2 MB / 19 hits on Sameer Mac and 7.8 MB / 5 hits on Sameer
-# iPhone. (Not the catalog's largest cluster — `amazon`'s
-# `ssl-images-amazon.com` alone is 3.09 GB / 422 hits on the same device.) The Kid Laptop bytes are
+# iPhone. Not the catalog's largest cluster: `amazon`'s `ssl-images-amazon.com`
+# alone is 3.09 GB / 422 hits on the same device. The Kid Laptop bytes are
 # course video and nothing else — its only observed subdomains are
 # `stream.videos`, `dl.videos` and `ye.courses`; it never touched the store.
 #
@@ -28,8 +28,10 @@ icon_type: url
 #
 # The three kept entries suffix-match every one of the five observed hosts
 # (`HostMatch.matchesApex`, shared/src/types/HostMatch.scala). Where each one
-# resolved on 2026-09-10 — these are multi-tenant CDN edges, NOT dedicated
-# origins; see the Class-2 note below for why that is accepted here:
+# resolved on 2026-09-10. What the whois establishes is narrower than "CDN
+# edge": every one sits in a large provider's shared address space (Fastly, or
+# Amazon `AT-88-Z`/`AMAZO-4` covering both CloudFront and generic AWS compute),
+# which is what _README.yml's Class 2 is about. See the Class-2 note below:
 #   www.sportys.com                pilot shop; CNAME sportys.com ->
 #                                   199.232.66.132 (whois: SKYCA-3 / Fastly).
 #                                   Fastly anycast addresses are shared across
@@ -69,9 +71,11 @@ icon_type: url
 # AWS console is never collaterally dropped. Distinct IPs today, so blocking
 # Sporty's drops no AWS-console address, and only resolved IPs enter an `eb_`
 # set — an adjacent address in the same /24 is not swept in. But the two hosts
-# demonstrably share a CloudFront PoP's address pool, so this is the one host in
-# this template to re-check first if #1663 ever revisits the Class-2 set: a
-# future steering change could land both on one address.
+# were OBSERVED sharing a CloudFront PoP's address pool, so this is the one host
+# in this template to re-check first if #1663 ever revisits the Class-2 set: a
+# future steering change could land both on one address. Stated as "observed"
+# on purpose — the same host also answered 3.161.225.x in one lookup, so its
+# address set moves.
 #
 # Residual to record, same as `arduino.yml` and `canva.yml`: bytes to bare
 # `sportys.com` go unattributed against the app's budget, and over plain HTTP

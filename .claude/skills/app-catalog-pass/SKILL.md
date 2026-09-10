@@ -212,10 +212,17 @@ above is now wrong, fix the step too — don't just log around it.
   a host with a claim about which pools it does or doesn't share** — describe
   the steering and rest the decision on what the host IS (app content vs
   telemetry vs shared vendor API), which doesn't move between lookups.
-  Corollary for the reverse direction: a host is worth keeping on its own
-  evidence when it is observed as a DIRECTLY-QUERIED name, since only the
-  queried name is suffix-matched into the nftset — being some other kept host's
-  CNAME target earns it no attribution.
+  Corollary, and get this one right: a host observed as a DIRECTLY-QUERIED name
+  is worth its own entry — but NOT because "a CNAME target earns no
+  attribution." That is false. #1344/#1346 fold a re-queried CNAME target back
+  onto its branded chain head, and `each_candidate_host` walks that recovered
+  head alongside the answered name
+  (`openwrt/files/usr/lib/lua/wifihaven/dns_tail_sets.lua`). The real reason is
+  that the alias edge is TTL-bounded and LRU-evicted (`resolve_head`,
+  `dns_log.lua`), so the fold-back is best-effort and an explicit entry is the
+  reliable version. Two drafts of this pass asserted a mechanism instead of
+  reading the agent code; **go read the Lua before writing "how attribution
+  works" into a template comment.**
 - **2026-09-10 (#2762)** — The prod traffic pull can be refused by the Claude
   Code permission classifier: the block lands on READING the credential
   (`prod_api_admin_password.md`), not on the API call — a plain

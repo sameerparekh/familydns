@@ -55,18 +55,26 @@ icon_type: url
 #
 # `ssl-images-amazon.com` IS listed as an apex, and the contrast with
 # `amazon.com` is the whole point: it is a single-purpose static-image zone, so
-# every child is storefront imagery by construction. Both observed children
-# (`images-na`, `images-eu`) CNAME to `m.media-amazon.com` -> `c.media-amazon.com`
-# and land on the same IPs the hosts below already carry, so the apex entry adds
-# no IP exposure this template doesn't already accept.
+# every child is storefront imagery by construction. That is the whole argument
+# — deliberately NOT "it adds no IP exposure", which would be the same kind of
+# unverifiable IP-set claim about DNS-steered CDN hosts that the `metrics.`
+# note below warns against.
 #
 # `media-amazon.com` is NOT listed as an apex, because one of its three
-# observed children is telemetry on a different pool:
+# observed children is telemetry:
 #   m.media-amazon.com        storefront image/media CDN — kept
-#   c.media-amazon.com        kept on its own evidence: it is observed as a
-#                              directly-queried name, not only as a CNAME
-#                              target, so it needs its own entry to be
-#                              attributed at all
+#   c.media-amazon.com        kept because real traffic on Kid Laptop is
+#                              attributed to `c.` directly, as its own name.
+#                              Do NOT justify this as "a CNAME target earns no
+#                              attribution" — that is false: #1344/#1346 fold a
+#                              re-queried CNAME target back onto its branded
+#                              chain head, and `each_candidate_host` walks that
+#                              recovered head as well as the answered name
+#                              (openwrt/.../dns_tail_sets.lua). The reason an
+#                              explicit entry is still worth having is that the
+#                              alias edge is TTL-bounded and LRU-evicted
+#                              (`resolve_head`, dns_log.lua), so the fold-back
+#                              is best-effort, not guaranteed.
 #   metrics.media-amazon.com  EXCLUDED: it is telemetry, and this template
 #                              carries only hosts whose bytes are storefront
 #                              imagery. Same call as excluding
