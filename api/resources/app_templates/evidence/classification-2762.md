@@ -105,6 +105,18 @@ Three subdomain entries suffix-match all five observed hosts via
 | `ye.courses.sportys.com` | CNAME `prod-ye-training.simplysporty.net` → 16.59.159.202, 3.23.25.151 |
 | `pspdfkit.courses.sportys.com` | CNAME `prod-pspdfkit.simplysporty.net` → 77.112.172.80, 77.112.39.76 (whois `AMAZO-4`) |
 
+Every one of those is a multi-tenant CDN edge, not a dedicated origin.
+199.232.66.132 is `SKYCA-3` / Fastly, and Fastly anycast addresses are shared
+across customers by design — nothing establishes it as Sporty's alone.
+
+Class-2 overlap check, which `_README.yml` asks for rather than assuming:
+`stream.videos.sportys.com` (99.84.105.{16,38,60,119}) and `aws.amazon.com`
+(99.84.105.{36,65,73,118}) sit in the SAME CloudFront /24 — and `amazon.yml`
+excludes the bare `amazon.com` apex precisely so the AWS console is never
+collaterally dropped. The addresses are distinct today and only resolved IPs
+enter an `eb_` set, so blocking Sporty's drops no AWS-console address. Recorded
+as the host to re-check first if #1663 revisits the Class-2 set.
+
 Bare `sportys.com` excluded. `images.sportys.com` CNAMEs off Sporty's own
 infrastructure — `media.esp1.co` → `media.espssl.com` →
 `media.espssl.com.cdn.cloudflare.net` → 172.64.144.42 / 104.18.43.214, a
@@ -134,14 +146,23 @@ construction. Both observed children CNAME to `m.media-amazon.com` →
 already accept.
 
 `media-amazon.com` is NOT listed as an apex, because `metrics.media-amazon.com`
-CNAMEs to `ecp.map.fastly.net` → 199.232.65.51, a Fastly pool none of the kept
-hosts touch — telemetry on its own collateral surface. Same call as excluding
-`telemetry.canva.com` and `sgtm.arduino.cc`.
+is telemetry and this template carries only hosts whose bytes are storefront
+imagery. Same call as excluding `telemetry.canva.com` and `sgtm.arduino.cc`.
+`metrics.` was observed CNAMEing to `ecp.map.fastly.net` → 199.232.65.51, but
+that is NOT the basis for the exclusion and must not be restated as "a pool no
+kept host touches": the kept image hosts are DNS-steered across CDNs, Fastly
+included, so pool-disjointness here is unverified.
+
+`c.media-amazon.com` is kept because it is observed as a directly-queried name,
+not merely as a CNAME target — it needs its own entry to be attributed at all.
+It is NOT justified as "adds no incremental IPs": that holds only in the
+steering state where `m.` resolves through `c.`.
 
 Amazon steers the image hosts between CDNs by DNS: `m.media-amazon.com` answered
-on Akamai (23.215.223.x via `a.media-amazon.com.akamaized.net`) and on CloudFront
-(13.226.249.165 / 99.84.98.145) within the same session. Accepted Class-2 latent
-risk per `_README.yml` — that IS where the app's bytes live.
+on Akamai (23.215.223.x via `a.media-amazon.com.akamaized.net`) and, minutes
+later, on CloudFront (13.226.249.165 / 99.84.98.145) via `c.media-amazon.com`.
+Any single `dig` of these hosts is a sample, not the host's IP set. Accepted
+Class-2 latent risk per `_README.yml` — that IS where the app's bytes live.
 
 Prime Video left out as a distinct service; netflix/youtube/twitch are separate
 apps and Prime Video should be too if it ever needs a template.

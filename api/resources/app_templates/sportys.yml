@@ -7,9 +7,10 @@ icon_type: url
 # courses.sportys.com/training/portal/). Same aviation cluster as the already
 # templated `geofs` and `moc-pilot`.
 #
-# This is the heaviest single-app cluster the catalog has seen: 2.04 GB /
-# 365 hits over a 30d window on Kid Laptop alone, plus 23.2 MB / 19 hits on
-# Sameer Mac and 7.8 MB / 5 hits on Sameer iPhone. The Kid Laptop bytes are
+# Heavy, sustained use: 2.04 GB / 365 hits over a 30d window on Kid Laptop
+# alone, plus 23.2 MB / 19 hits on Sameer Mac and 7.8 MB / 5 hits on Sameer
+# iPhone. (Not the catalog's largest cluster — `amazon`'s
+# `ssl-images-amazon.com` alone is 3.09 GB / 422 hits on the same device.) The Kid Laptop bytes are
 # course video and nothing else — its only observed subdomains are
 # `stream.videos`, `dl.videos` and `ye.courses`; it never touched the store.
 #
@@ -26,12 +27,14 @@ icon_type: url
 # used" excludes it independently.
 #
 # The three kept entries suffix-match every one of the five observed hosts
-# (`HostMatch.matchesApex`, shared/src/types/HostMatch.scala), and each lands
-# on infrastructure that is Sporty's own or a per-service dedicated origin —
-# not a shared-tenant pool of the Shopify/Zendesk class `arduino.yml` excludes:
+# (`HostMatch.matchesApex`, shared/src/types/HostMatch.scala). Where each one
+# resolved on 2026-09-10 — these are multi-tenant CDN edges, NOT dedicated
+# origins; see the Class-2 note below for why that is accepted here:
 #   www.sportys.com                pilot shop; CNAME sportys.com ->
-#                                   199.232.66.132, a Sporty's-specific Fastly
-#                                   anycast address
+#                                   199.232.66.132 (whois: SKYCA-3 / Fastly).
+#                                   Fastly anycast addresses are shared across
+#                                   customers by design; nothing establishes
+#                                   this one as Sporty's alone.
 #   videos.sportys.com             covers the two course-video hosts, which
 #                                   carry essentially all of the bytes above:
 #     stream.videos.sportys.com     streaming; CloudFront 99.84.105.x
@@ -57,6 +60,19 @@ icon_type: url
 # CDN. That IS where this app's bytes live, so stripping them would defeat both
 # the block and the time budget.
 #
+# _README.yml says to revisit a Class-2 host "only if real traffic evidence
+# shows it actually shares IPs with collateral we care about", so that check was
+# run rather than assumed, and it is closer than it looks:
+# `stream.videos.sportys.com` answers 99.84.105.{16,38,60,119} and
+# `aws.amazon.com` answers 99.84.105.{36,65,73,118} — the SAME CloudFront /24,
+# and `amazon.yml` excludes the bare `amazon.com` apex specifically so that the
+# AWS console is never collaterally dropped. Distinct IPs today, so blocking
+# Sporty's drops no AWS-console address, and only resolved IPs enter an `eb_`
+# set — an adjacent address in the same /24 is not swept in. But the two hosts
+# demonstrably share a CloudFront PoP's address pool, so this is the one host in
+# this template to re-check first if #1663 ever revisits the Class-2 set: a
+# future steering change could land both on one address.
+#
 # Residual to record, same as `arduino.yml` and `canva.yml`: bytes to bare
 # `sportys.com` go unattributed against the app's budget, and over plain HTTP
 # the apex redirect to `www` completes before the drop lands on the follow-on
@@ -69,6 +85,12 @@ icon_type: url
 # separate site on separate infrastructure with no observed traffic; per
 # #2596 (`renaissance.com`), a topically adjacent sibling apex needs its own
 # evidence before it joins an app's host-set.
+# Note for a future author diffing observed subdomains against this host-set:
+# `videos.sportys.com` has no A record of its own and no traffic will ever be
+# attributed to that exact name. It is a pure suffix anchor for the two
+# `*.videos` hosts — both `nftset=/<host>/` and `HostMatch.matchesApex` match on
+# the suffix, not on the entry resolving — so it is doing its job, not a dead
+# entry.
 hosts:
   - www.sportys.com
   - videos.sportys.com

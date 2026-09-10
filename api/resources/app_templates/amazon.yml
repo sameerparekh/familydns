@@ -20,9 +20,10 @@ icon_type: url
 #                                out an adult's cloud console.
 #   api.amazon.com              Login with Amazon — a shared vendor API that
 #                                signs users into unrelated third-party sites
-#                                and backs Alexa integrations. Class 1 in
-#                                _README.yml terms, and it resolves onto the
-#                                same 98.82.x AWS range as the apex itself.
+#                                and backs Alexa integrations. Exactly the
+#                                shape _README.yml's Class 1 warns about, and
+#                                it resolves onto the same 98.82.x AWS range as
+#                                the apex itself.
 #   arcus-uswest.amazon.com,
 #   msh.amazon.com              Alexa / connected-device infrastructure.
 #   read.amazon.com,
@@ -62,20 +63,26 @@ icon_type: url
 # `media-amazon.com` is NOT listed as an apex, because one of its three
 # observed children is telemetry on a different pool:
 #   m.media-amazon.com        storefront image/media CDN — kept
-#   c.media-amazon.com        the terminal CNAME target of `m.` and of both
-#                              ssl-images children — kept; adds no incremental
-#                              IPs, and it is where the image bytes actually
-#                              land
-#   metrics.media-amazon.com  EXCLUDED: telemetry, and it alone CNAMEs to
-#                              `ecp.map.fastly.net` -> 199.232.65.51, a Fastly
-#                              pool none of the kept hosts touch. Same call as
-#                              excluding `telemetry.canva.com` and
-#                              `sgtm.arduino.cc`.
+#   c.media-amazon.com        kept on its own evidence: it is observed as a
+#                              directly-queried name, not only as a CNAME
+#                              target, so it needs its own entry to be
+#                              attributed at all
+#   metrics.media-amazon.com  EXCLUDED: it is telemetry, and this template
+#                              carries only hosts whose bytes are storefront
+#                              imagery. Same call as excluding
+#                              `telemetry.canva.com` and `sgtm.arduino.cc`.
+#                              (It was observed CNAMEing to `ecp.map.fastly.net`
+#                              -> 199.232.65.51. Do NOT restate that as "a pool
+#                              no kept host touches": the kept image hosts are
+#                              DNS-steered across CDNs, Fastly included, so
+#                              pool-disjointness here is unverified and is not
+#                              what the exclusion rests on.)
 #
-# Amazon steers these image hosts between CDNs by DNS — `m.media-amazon.com`
-# has been seen answering on both Akamai (23.215.223.x, via
-# a.media-amazon.com.akamaized.net) and CloudFront (13.226.249.165 /
-# 99.84.98.145) — so their resolved IPs are multi-tenant edges either way.
+# Amazon steers these image hosts between CDNs by DNS: `m.media-amazon.com` was
+# seen answering on Akamai (23.215.223.x, via a.media-amazon.com.akamaized.net)
+# and, minutes later, on CloudFront (13.226.249.165 / 99.84.98.145) via
+# `c.media-amazon.com`. Treat any single `dig` of these hosts as a sample, not
+# as the host's IP set — their resolved IPs are multi-tenant edges either way.
 # That is the accepted Class-2 latent risk from _README.yml: it IS where this
 # app's bytes live, and stripping it would defeat both the block and the time
 # budget.
@@ -83,6 +90,11 @@ icon_type: url
 # Residual worth naming: `media-amazon.com` also serves imagery for IMDb and
 # Prime Video, so if a Prime Video app is ever templated, some of its image
 # bytes will already be attributed here.
+# Note for a future author diffing observed subdomains against this host-set:
+# `ssl-images-amazon.com` has no A record of its own and no traffic will ever be
+# attributed to that exact name. It is a pure suffix anchor — both
+# `nftset=/<host>/` and `HostMatch.matchesApex` match on the suffix, not on the
+# entry resolving — so it is doing its job, not a dead entry.
 hosts:
   - www.amazon.com
   - ssl-images-amazon.com
